@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 class ModuleModelConfig(BaseModel):
     """Model and provider assignment for a single module."""
     provider: str = "openai"
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-pro"
     temperature: float = 0.0
     max_retries: int = 3
+    max_tokens: int = 4096
 
 
 class ModuleActivation(BaseModel):

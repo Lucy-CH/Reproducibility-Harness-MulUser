@@ -2,4 +2,10 @@ Multi-User-LLM-Agent/
 venv/
 idea for HarnessMulUser/
 CLAUDE.md
-harness_mu/__pycache__/
+.env
+.env.example
+results/
+**/__pycache__/
+/supportive files
+1.txt
+Harness_MulUser/harness_mu/data/
