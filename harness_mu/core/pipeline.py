@@ -5,7 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from harness_mu.utils.file_utils import setup_output_structure, load_existing_results
 
@@ -13,10 +13,6 @@ from harness_mu.config.schema import HarnessMUConfig, ScenarioConfig
 from harness_mu.core.types import ScenarioRecord
 from harness_mu.llm.factory import LLMFactory
 from harness_mu.metrics.collector import MetricsCollector
-from harness_mu.modules.gatekeeper import Gatekeeper
-from harness_mu.modules.mediator import Mediator
-from harness_mu.modules.worker import Worker
-from harness_mu.modules.compliance_checker import ComplianceChecker
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +186,13 @@ class PipelineOrchestrator:
                     llm_factory=self._llm_factory,
                     metrics_collector=self._metrics_collector,
                 )
+            elif scenario_name == "access_control":
+                from harness_mu.adapters.access_control import AccessControlAdapter
+                self._adapters[scenario_name] = AccessControlAdapter(
+                    config=self._config,
+                    llm_factory=self._llm_factory,
+                    metrics_collector=self._metrics_collector,
+                )
             else:
                 raise ValueError(f"No adapter for scenario: {scenario_name}")
         return self._adapters[scenario_name]
@@ -207,29 +210,27 @@ class PipelineOrchestrator:
     @staticmethod
     def _write_eva_summary(eva_path: Path, results: List[ScenarioRecord]):
         """Write the incremental evaluation summary JSON."""
-        acc_values = [
-            r.metrics.get("accuracy", 0)
-            for r in results
-            if "accuracy" in r.metrics
-        ]
-        avg_acc = sum(acc_values) / len(acc_values) if acc_values else 0.0
+        summary: Dict[str, Any] = {"total_scenarios": len(results)}
 
-        summary = {
-            "total_scenarios": len(results),
-            "avg_accuracy": avg_acc,
-        }
+        def _avg(key: str) -> Optional[float]:
+            vals = [r.metrics.get(key) for r in results if isinstance(r.metrics.get(key), (int, float))]
+            return sum(vals) / len(vals) if vals else None
 
-        # Aggregate Harness-MU custom metrics
+        for k in ("accuracy", "weighted_accuracy", "privacy_score", "utility_score", "overall_score"):
+            v = _avg(k)
+            if v is not None:
+                summary[f"avg_{k}"] = v
+
+        # Harness-MU IF custom metrics
         authority_scores = []
         per_user_rates = []
         for r in results:
-            hmu = r.metrics.get("_harness_mu", {})
+            hmu = r.metrics.get("_harness_mu", {}) or {}
             acs = hmu.get("authority_compliance_score")
             if acs is not None:
                 authority_scores.append(acs)
-            for pu in hmu.get("per_user_satisfaction", []):
+            for pu in hmu.get("per_user_satisfaction", []) or []:
                 per_user_rates.append(pu.get("score", 0.0))
-
         if authority_scores:
             summary["avg_authority_compliance"] = sum(authority_scores) / len(authority_scores)
         if per_user_rates:
@@ -244,13 +245,10 @@ class PipelineOrchestrator:
         if not results:
             logger.info("No results to summarize.")
             return
-        acc_values = [
-            r.metrics.get("accuracy", 0)
-            for r in results
-            if "accuracy" in r.metrics
-        ]
-        avg_acc = sum(acc_values) / len(acc_values) if acc_values else 0.0
         print(f"\n{'='*50}")
         print(f"  Scenarios completed: {len(results)}")
-        print(f"  Average accuracy:    {avg_acc:.2%}")
+        for k in ("accuracy", "privacy_score", "utility_score", "overall_score"):
+            vals = [r.metrics.get(k) for r in results if isinstance(r.metrics.get(k), (int, float))]
+            if vals:
+                print(f"  Average {k:<14} {sum(vals)/len(vals):.2%}")
         print(f"{'='*50}")

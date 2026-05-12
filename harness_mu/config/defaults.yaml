@@ -22,10 +22,18 @@ scenarios:
     enabled: true
     data_file: data/instruction_following/aligned_2_to_10.jsonl
     modules:
+      gatekeeper: false
+      mediator: true
+      worker: true
+      compliance_checker: true
+  access_control:
+    enabled: false
+    data_file: data/access_control/none_sample.jsonl
+    modules:
       gatekeeper: true
       mediator: true
       worker: true
-      compliance_checker: false
+      compliance_checker: true
 
 output:
   results_dir: results

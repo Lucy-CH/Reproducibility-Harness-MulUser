@@ -1,18 +1,26 @@
-"""Instruction-Following scenario adapter.
+"""Instruction-Following scenario adapter (Skill Layer).
 
-Orchestrates: parse → Gatekeeper → Mediator Pass1 → Worker →
-Mediator Pass2 → [revision?] → evaluate.
+Flow:
+    parse_scenario() -> PipelineContext
+    [conflict mode only] Mediator.run_if_conflict()   (LLM, single call)
+    Worker.run_per_user()                             (LLM, parallel per user)
+    ComplianceChecker.run_instruction_following()     (deterministic)
+    [if any failure] Worker.run_per_user(only_user_ids=failed)  (one revision)
+    _evaluate()                                       (all users, all checkers)
+
+The Mediator is skipped entirely in aligned mode (no conflict to resolve).
+The Gatekeeper is not used: authority levels are ground-truth fields.
 """
 
 import json
 import logging
+from typing import Dict, List, Set
 
 from harness_mu.adapters.base import ScenarioAdapter
 from harness_mu.config.schema import HarnessMUConfig
 from harness_mu.core.types import PipelineContext, ScenarioRecord
 from harness_mu.llm.factory import LLMFactory
 from harness_mu.metrics.collector import MetricsCollector
-from harness_mu.modules.gatekeeper import Gatekeeper
 from harness_mu.modules.mediator import Mediator
 from harness_mu.modules.worker import Worker
 from harness_mu.modules.compliance_checker import ComplianceChecker
@@ -20,20 +28,11 @@ from harness_mu.validation.instruction_checkers import REGISTRY
 
 logger = logging.getLogger(__name__)
 
-MAX_REVISIONS = 1  # Maximum Worker revision rounds after Mediator Pass2 rejection
+MAX_REVISIONS = 1  # White-box-driven Worker revision rounds
 
 
 class InstructionFollowingAdapter(ScenarioAdapter):
-    """Adapter for the Muses-Bench instruction_following scenario.
-
-    Flow:
-        parse_scenario() -> PipelineContext
-        Gatekeeper.run()        (always — extract authority)
-        Mediator.run_pass1()    (always — guidance plan)
-        Worker.run()            (always — generate responses)
-        Mediator.run_pass2()    (always — review; may trigger Worker revision)
-        _evaluate()             (all users, all instruction checkers)
-    """
+    """Adapter for the Muses-Bench instruction_following scenario."""
 
     def __init__(
         self,
@@ -65,69 +64,49 @@ class InstructionFollowingAdapter(ScenarioAdapter):
             raise ValueError("No 'instruction_following' scenario in config")
 
         activation = scenario_cfg.modules
+        meta = ctx.scenario_data.get("meta", {}) or {}
+        mode = meta.get("mode", "aligned")
 
-        # --- Step 1: Gatekeeper (always) ---
-        gatekeeper = Gatekeeper(self._llm_factory.get_caller("gatekeeper"))
-        if gatekeeper.is_enabled(activation):
-            gk_result = gatekeeper.run(ctx)
-            logger.debug(
-                "[%s] gatekeeper: %d permissions, %d malicious excluded",
-                ctx.scenario_id,
-                len(gk_result.data.get("permissions", [])),
-                len(gk_result.data.get("malicious", [])),
-            )
-
-        # --- Step 2: Mediator Pass 1 — Guidance Planning (always) ---
+        # --- Step 1: Mediator (conflict mode only) ---
         mediator = Mediator(self._llm_factory.get_caller("mediator"))
-        if mediator.is_enabled(activation):
-            p1_result = mediator.run_pass1(ctx)
+        if mode == "conflict" and mediator.is_enabled(activation):
+            m_result = mediator.run_if_conflict(ctx)
             logger.debug(
-                "[%s] mediator pass1: mode=%s, conflicts=%d, guidance=%d users",
+                "[%s] mediator: guidance=%d, note=%s",
                 ctx.scenario_id,
-                p1_result.data.get("mode", "?"),
-                p1_result.data.get("conflicts_found", 0),
-                len(p1_result.data.get("guidance", [])),
+                len(m_result.data.get("guidance", [])),
+                m_result.data.get("resolution_note", "")[:80],
             )
 
-        # --- Step 3: Worker ---
-        worker = Worker(self._llm_factory.get_caller("worker"))
-        worker.run(ctx, use_training_format=self._use_training_format)
+        # --- Step 2: Worker (per-user, parallel) ---
+        worker = Worker(
+            self._llm_factory.get_caller("worker"),
+            max_workers=self._config.execution.max_workers,
+        )
+        worker.run_per_user(ctx)
 
-        # --- Step 4: Mediator Pass 2 — Review + Revision loop ---
-        if mediator.is_enabled(activation):
-            for revision in range(MAX_REVISIONS + 1):
-                p2_result = mediator.run_pass2(ctx)
-                approved = p2_result.data.get("approved", True)
-                feedback = p2_result.data.get("feedback", [])
+        # --- Step 3: ComplianceChecker (deterministic, fail-closed) ---
+        compliance = ComplianceChecker()
+        compliance.run_instruction_following(ctx)
 
-                if approved:
-                    logger.debug(
-                        "[%s] mediator pass2: APPROVED (revision %d)",
-                        ctx.scenario_id, revision,
-                    )
-                    break
-                else:
-                    logger.info(
-                        "[%s] mediator pass2: REJECTED (revision %d), %d feedback items",
-                        ctx.scenario_id, revision, len(feedback),
-                    )
-                    if revision < MAX_REVISIONS:
-                        # Store feedback for Worker revision
-                        ctx.artifacts["mediator.revision_feedback"] = feedback
-                        ctx.artifacts["mediator.revision_count"] = revision + 1
-                        worker.run(ctx, use_training_format=self._use_training_format)
-                    else:
-                        logger.warning(
-                            "[%s] max revisions (%d) reached, accepting current output",
-                            ctx.scenario_id, MAX_REVISIONS,
-                        )
+        # --- Step 4: Revision loop (white-box driven) ---
+        for revision in range(MAX_REVISIONS):
+            failures = ctx.artifacts.get("compliance.failures", []) or []
+            if not failures:
+                break
+            failed_user_ids: Set[str] = {f.get("user_id", "") for f in failures}
+            logger.info(
+                "[%s] revision %d: %d failed users -> %s",
+                ctx.scenario_id, revision + 1, len(failed_user_ids), sorted(failed_user_ids),
+            )
+            ctx.artifacts["mediator.revision_feedback"] = (
+                Mediator.build_revision_feedback(failures)
+            )
+            ctx.artifacts["mediator.revision_count"] = revision + 1
+            worker.run_per_user(ctx, only_user_ids=list(failed_user_ids))
+            compliance.run_instruction_following(ctx)
 
-        # --- Step 5: ComplianceChecker (stub for IF) ---
-        compliance = ComplianceChecker(self._llm_factory.get_caller("compliance_checker"))
-        if compliance.is_enabled(activation):
-            compliance.run(ctx)
-
-        # --- Step 6: Evaluate ---
+        # --- Step 5: Evaluate ---
         instruction_results, metrics = self._evaluate(ctx)
 
         record = ScenarioRecord(
@@ -136,7 +115,6 @@ class InstructionFollowingAdapter(ScenarioAdapter):
             instruction_results=instruction_results,
             metrics=metrics,
             raw_outputs={
-                "worker_raw": ctx.artifacts.get("worker.raw_output", ""),
                 "worker_parsed": json.dumps(
                     ctx.artifacts.get("worker.parsed_responses", {}),
                     ensure_ascii=False,
