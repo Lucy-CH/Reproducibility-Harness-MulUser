@@ -8,4 +8,5 @@ results/
 **/__pycache__/
 /supportive files
 1.txt
-Harness_MulUser/harness_mu/data/
+harness_mu/data/
+harness_mu/docs/

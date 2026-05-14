@@ -70,7 +70,7 @@ harness_mu/
 │       └── access_control.py          # privacy / utility / overall (F1)
 ├── prompts/prompts.py          # System prompts for all modules
 ├── validation/
-│   └── instruction_checkers.py # IFEval white-box checker registry
+│   └── instruction_checkers.py # Thin wrapper forwarding to IHEval
 ├── utils/                      # llm_utils, file_utils, timer, format_utils
 └── data/                       # bundled sample datasets
     ├── instruction_following/
@@ -147,3 +147,36 @@ processed scenario IDs. Delete the directory for a clean run.
   `overall_score = F1(privacy, utility)`,
   `num_boundary_intercepts` (how many times the Boundary Layer rewrote a
   leaking response — direct evidence of the layer's contribution).
+
+## Instruction-following checkers (IHEval)
+
+`validation/instruction_checkers.py` is a thin wrapper that re-exports
+the official rule-based checker registry from
+[IHEval](https://github.com/ytyz1307zzh/IHEval) (NAACL 2025). The
+Muses-Bench IF evaluator uses the exact same registry, so harness_mu and
+muses_bench grade IF outputs with **byte-identical** Python — any
+accuracy delta is attributable to the pipeline, not the metric.
+
+Setup (one-time, in the repo root):
+
+```bash
+git clone https://github.com/ytyz1307zzh/IHEval.git Multi-User-LLM-Agent/IHEval
+source venv/bin/activate
+pip install rouge-score colorama termcolor langdetect immutabledict nltk
+python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab')"
+```
+
+The wrapper resolves IHEval at
+`Multi-User-LLM-Agent/IHEval/src/rule_following/evaluate/`. Override
+with the `IHEVAL_SRC` env var if checked out elsewhere. Import fails
+loudly if the path is missing — there is no silent-fallback empty
+registry.
+
+## Future work
+
+* **IHEval Safety Defense as a single-user baseline.** IHEval ships
+  four `safety_defense` tasks (`hijack_*`, `extraction_*`) whose threat
+  model is structurally identical to our AC scenarios but with a single
+  user. Wiring them into harness_mu as an additional adapter would let
+  us report cross-benchmark generalization for the Boundary Layer.
+  Tracked but deliberately deferred.

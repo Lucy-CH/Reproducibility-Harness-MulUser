@@ -96,7 +96,15 @@ class PipelineOrchestrator:
             load_existing_results(str(log_file)) if log_file else ([], set())
         )
 
-        results: List[ScenarioRecord] = []
+        # Seed results with resumed scenarios so eva.json aggregates over the
+        # full set (resumed + fresh) instead of only the fresh ones.
+        results: List[ScenarioRecord] = [
+            ScenarioRecord(
+                scenario_id=r.get("scenario_id", ""),
+                metrics=r.get("metrics", {}) or {},
+            )
+            for r in existing_results
+        ]
 
         # Import adapter lazily to avoid circular imports
         adapter = self._get_adapter(scenario_name)
@@ -116,7 +124,12 @@ class PipelineOrchestrator:
                 futures[executor.submit(adapter.run, line)] = sid
 
             for future in as_completed(futures):
-                record = future.result()
+                sid = futures.get(future, "?")
+                try:
+                    record = future.result()
+                except Exception as e:
+                    logger.warning("[%s] scenario crashed: %s", sid, e)
+                    continue
                 if record is None:
                     continue
 
