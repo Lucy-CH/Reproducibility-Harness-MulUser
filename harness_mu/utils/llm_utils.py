@@ -20,7 +20,6 @@ def call_llm_with_retry(
     retry_delay: float = 1.0,
     max_tokens: int = 4096,
     llm_client=None,
-    lora_request=None,
 ):
     """Call LLM API with retry and exponential backoff.
 
@@ -32,7 +31,6 @@ def call_llm_with_retry(
         max_retries: Maximum retry attempts.
         retry_delay: Initial retry delay in seconds (doubles each retry).
         llm_client: Optional vLLM client instance.
-        lora_request: Optional LoRA request for vLLM.
 
     Returns:
         API response object (or MockResponse for vLLM matching OpenAI structure).
@@ -61,7 +59,7 @@ def call_llm_with_retry(
                 )
         try:
             response_text = generate_vllm_response(
-                llm_client, lora_request, messages, temperature=temperature,
+                llm_client, None, messages, temperature=temperature,
             )
             return MockResponse(response_text)
         except Exception as e:

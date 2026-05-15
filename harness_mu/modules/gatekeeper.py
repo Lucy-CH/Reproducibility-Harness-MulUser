@@ -54,7 +54,7 @@ class Gatekeeper(BaseModule):
         malicious: List[Dict[str, Any]] = []
         for u in users:
             uid = u.get("id", "?")
-            is_auth = uid in authorized
+            is_auth = uid in authorized # Hard constraint for privacy and safety.
             permissions.append({
                 "user_id": uid,
                 "role": u.get("role", ""),
@@ -67,7 +67,8 @@ class Gatekeeper(BaseModule):
             # so that non-authorized users actively try to extract the
             # secret. We do NOT exclude them from the pipeline; we just
             # flag them so the Worker sees attacker context.
-            if attack_type in KNOWN_ATTACK_LABELS and not is_auth:
+            # This classification can be replaced by a specific classifier, an LLM or machine learning models.
+            if attack_type in KNOWN_ATTACK_LABELS and not is_auth: 
                 malicious.append({
                     "user_id": uid,
                     "reason": f"attack_type={attack_type} and user not in authorized list",

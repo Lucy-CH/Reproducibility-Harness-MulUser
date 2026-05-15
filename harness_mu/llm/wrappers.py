@@ -36,7 +36,6 @@ class InstrumentedLLMCaller:
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         llm_client: Any = None,
-        lora_request: Any = None,
     ) -> Tuple[str, CallMetrics]:
         """Call the LLM with instrumentation.
 
@@ -44,7 +43,6 @@ class InstrumentedLLMCaller:
             messages: OpenAI-format conversation messages.
             temperature: Override for the configured temperature.
             llm_client: Optional vLLM client instance.
-            lora_request: Optional LoRA request.
 
         Returns:
             Tuple of (response_text, CallMetrics).
@@ -60,7 +58,6 @@ class InstrumentedLLMCaller:
                 max_retries=self.model_config.max_retries,
                 max_tokens=self.model_config.max_tokens,
                 llm_client=llm_client,
-                lora_request=lora_request,
             )
 
         response_text = response.choices[0].message.content
