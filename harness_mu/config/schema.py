@@ -9,7 +9,9 @@ class ModuleModelConfig(BaseModel):
     provider: str = "openai"
     model: str = "deepseek-v4-pro"
     temperature: float = 0.0
-    max_retries: int = 3
+    # Higher default than 3 to absorb MAAS burst-suppression (3 req/min);
+    # DeepSeek almost never errors so the extra slots are unused there.
+    max_retries: int = 6
     max_tokens: int = 4096
 
 

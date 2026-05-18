@@ -1,19 +1,19 @@
 default_model:
   provider: openai
-  model: deepseek-v4-pro
+  model: qwen/qwen3.6-35b-a3b
   temperature: 0.0
-  max_retries: 3
+  max_retries: 6
   max_tokens: 4096
 
 module_models:
   mediator:
     provider: openai
-    model: deepseek-v4-pro
+    model: qwen/qwen3.6-35b-a3b
     temperature: 0.0
     max_tokens: 4096
   worker:
     provider: openai
-    model: deepseek-v4-pro
+    model: qwen/qwen3.6-35b-a3b
     temperature: 0.7
     max_tokens: 16384
 
@@ -28,7 +28,11 @@ scenarios:
       compliance_checker: true
   access_control:
     enabled: false
-    data_file: data/access_control/none_sample.jsonl
+    # Default = colon-template + none-attack (matches Muses-Bench default).
+    # Other 11 attack/template combinations live alongside in
+    # data/access_control/template_*.jsonl. The two *_sample.jsonl files are
+    # 3-row subsets of the colon-template variants for quick sanity checks.
+    data_file: data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
     modules:
       gatekeeper: true
       mediator: true
@@ -41,5 +45,8 @@ output:
   save_metrics: true
 
 execution:
+  # 16 is appropriate for providers without a tight per-second guard
+  # (DeepSeek, OpenRouter paid tier). For MAAS lower this to ~4 and pair
+  # with OPENAI_RATE_LIMIT_PER_MIN <= 60 so rate_per_sec stays <= 1.
   max_workers: 16
   debug: false
