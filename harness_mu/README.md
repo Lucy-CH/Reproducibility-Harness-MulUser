@@ -36,6 +36,15 @@ Boundary Layer (deterministic Python — last, non-bypassable filter)
 * **Worker** (`modules/worker.py`) supports `run_per_user` (default), which
   issues one isolated LLM call per user in parallel. This is the primary
   defense against cross-user prompt injection.
+* **Transcript Replay** (AC-only, optional) — when
+  `scenarios.access_control.transcript.mode == "replay"` the Skill Layer
+  loads a per-scenario JSONL cache produced by Muses-Bench (multi-turn
+  `SimulatedUser` dialogue) and overwrites each user's `instructions`
+  with the flattened multi-turn attack content. The Worker then sees
+  bit-identical attack text to what the Muses-Bench defender saw,
+  enabling apples-to-apples comparison. Open-loop: inter-turn
+  dynamics are lost on the Harness side. See
+  `docs/run_experiments.md §9.6` for the generate-then-replay workflow.
 
 ## Directory layout
 
@@ -62,6 +71,7 @@ harness_mu/
 ├── config/
 │   ├── schema.py               #   pydantic config models
 │   ├── defaults.yaml           #   default model + scenario activation
+│   ├── ac_replay_bmini.yaml    #   AC strict replay (4 modules = deepseek)
 │   └── loader.py               #   YAML + HMU_* env-var override
 ├── metrics/
 │   ├── collector.py            #   thread-safe per-module aggregation
@@ -77,16 +87,22 @@ harness_mu/
     │   ├── aligned_2_to_10.jsonl       (187 scenarios)
     │   └── conflict_2_to_10.jsonl      (368 scenarios)
     └── access_control/
-        ├── none_sample.jsonl           (3 benign  scenarios)
-        └── fake_authorized_sample.jsonl(3 attack  scenarios)
+        ├── template_{colon,says,xml}_attack_{none,fake_authorized,pressure,roleplaying}_*.jsonl
+        │                               (12 files × 18 scenarios = 216)
+        ├── none_sample.jsonl           (3 benign  scenarios, sanity check)
+        └── fake_authorized_sample.jsonl(3 attack  scenarios, sanity check)
 ```
+
+Transcript cache for AC replay lives outside `harness_mu/` at
+`<repo_root>/transcripts/access_control/`; both `muses_bench`
+(generator) and `harness_mu` (consumer) read/write the same files.
 
 ## Configuration
 
-Defaults live in `config/defaults.yaml` (model `deepseek-v4-pro`). Override
-with a YAML file (`--config foo.yaml`) or env vars (`HMU_DEFAULT_MODEL`,
-`HMU_WORKER_MODEL`, `HMU_MEDIATOR_MODEL`, `HMU_DEBUG`, `HMU_MAX_WORKERS`,
-…).
+Defaults live in `config/defaults.yaml` (model `qwen/qwen3.6-35b-a3b`).
+Override with a YAML file (`--config foo.yaml`) or env vars
+(`HMU_DEFAULT_MODEL`, `HMU_WORKER_MODEL`, `HMU_MEDIATOR_MODEL`,
+`HMU_DEBUG`, `HMU_MAX_WORKERS`, …).
 
 API credentials are read from a `.env` file at the repo root or
 `harness_mu/.env`. Required keys: `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
@@ -99,6 +115,21 @@ Per-scenario module activation is in `defaults.yaml > scenarios.<name>.modules`:
 | access_control        | true       | true     | true   | true               |
 
 *Mediator runs only when `meta.mode == "conflict"`.
+
+Per-scenario transcript replay is in
+`defaults.yaml > scenarios.access_control.transcript`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `"off"` | `"off"` skips replay (uses dataset `initial_messages`); `"replay"` loads cached multi-turn attack content. |
+| `cache_dir` | `null` | `null` → `<repo_root>/transcripts`. Override to point elsewhere. |
+| `simulator_model` | `deepseek-v4-pro` | Must match the `--user-model` used when generating the cache on the Muses-Bench side; participates in the cache filename. |
+| `max_turns` | `10` | Must match the `--max-turns` used when generating; participates in the cache filename. |
+
+The `ac_replay_bmini.yaml` config is a ready-made override that flips
+all four AC modules to `deepseek-v4-pro` and sets `mode: replay` — used
+for the strict apples-to-apples comparison against Muses-Bench. See
+`docs/run_experiments.md §9.6` for the full generate-then-replay flow.
 
 ## Running experiments
 
@@ -121,6 +152,12 @@ python -m harness_mu --scenario access_control --debug
 # AC fake_authorized attacks (Boundary Layer stress test)
 python -m harness_mu --scenario access_control --debug \
     --data data/access_control/fake_authorized_sample.jsonl
+
+# AC strict-replay (fair vs Muses-Bench: same defender, same attack text)
+# Requires cache file under transcripts/access_control/ — generate first
+# via Muses-Bench: see docs/run_experiments.md §9.6.
+python -m harness_mu --scenario access_control \
+    --config harness_mu/config/ac_replay_bmini.yaml
 ```
 
 Useful flags: `--debug` (first 3 scenarios, single worker), `--verbose`

@@ -2,6 +2,7 @@
 
 Flow:
     parse_scenario() -> PipelineContext
+    [optional] _apply_transcript_replay()  (rewrites user instructions)
     Gatekeeper.run()              (deterministic, no LLM by default)
     Mediator.run_ac_isolation()   (LLM, single call)
     Worker.run_per_user()         (LLM, parallel; isolated system prompts)
@@ -11,9 +12,11 @@ Flow:
 
 import json
 import logging
+from pathlib import Path
+from typing import Optional
 
 from harness_mu.adapters.base import ScenarioAdapter
-from harness_mu.config.schema import HarnessMUConfig
+from harness_mu.config.schema import HarnessMUConfig, TranscriptConfig
 from harness_mu.core.types import PipelineContext, ScenarioRecord
 from harness_mu.llm.factory import LLMFactory
 from harness_mu.metrics.collector import MetricsCollector
@@ -22,6 +25,16 @@ from harness_mu.modules.compliance_checker import ComplianceChecker
 from harness_mu.modules.gatekeeper import Gatekeeper
 from harness_mu.modules.mediator import Mediator
 from harness_mu.modules.worker import Worker
+
+try:
+    from muses_bench.utils.transcript_cache import (
+        TranscriptCache,
+        cache_file_path,
+        default_cache_root,
+    )
+    _TRANSCRIPT_AVAILABLE = True
+except ImportError:  # muses_bench not installed
+    _TRANSCRIPT_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +79,14 @@ class AccessControlAdapter(ScenarioAdapter):
         scenario_cfg = self._config.scenarios.get("access_control")
         if scenario_cfg is None:
             raise ValueError("No 'access_control' scenario in config")
+
+        # --- Step 0: Open-loop transcript replay (overwrites instructions) ---
+        if scenario_cfg.transcript.mode == "replay":
+            self._apply_transcript_replay(
+                ctx,
+                scenario_cfg.transcript,
+                dataset_stem=Path(scenario_cfg.data_file).stem,
+            )
 
         activation = scenario_cfg.modules
 
@@ -140,3 +161,71 @@ class AccessControlAdapter(ScenarioAdapter):
             result["privacy_score"] >= 1.0 and result["utility_score"] >= 1.0
         )
         return result
+
+    # ------------------------------------------------------------------
+    # Open-loop transcript replay
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_transcript_replay(
+        ctx: PipelineContext,
+        cfg: TranscriptConfig,
+        dataset_stem: str,
+    ) -> None:
+        """Overwrite each user's instructions with cached SimulatedUser text.
+
+        For every user, every turn in which that user spoke is collected in
+        order and joined into a single multi-message list. The Worker then
+        sees the full attack content the Muses-Bench defender saw, in the
+        same wording, at the cost of losing inter-turn dynamics (open-loop).
+        Missing cache or missing scenario_id is fail-loud — silent fallback
+        to the dataset's ``initial_messages`` would silently undo the
+        fairness intent of the replay run.
+        """
+        if not _TRANSCRIPT_AVAILABLE:
+            raise RuntimeError(
+                "transcript.mode='replay' requires muses_bench to be importable"
+            )
+        cache_root = (
+            Path(cfg.cache_dir).expanduser().resolve()
+            if cfg.cache_dir
+            else default_cache_root()
+        )
+        path = cache_file_path(
+            cache_root=cache_root,
+            scenario_kind="access_control",
+            dataset_stem=dataset_stem,
+            simulator_model=cfg.simulator_model,
+            max_turns=cfg.max_turns,
+        )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Transcript cache not found: {path}. "
+                f"Run Muses-Bench with --transcript-mode generate first."
+            )
+        cache = TranscriptCache(path)
+        record = cache.load(ctx.scenario_id)
+        if record is None:
+            raise KeyError(
+                f"scenario_id={ctx.scenario_id!r} not in cache {path}"
+            )
+
+        # Flatten: uid -> [turn1_msg, turn2_msg, ...] in original turn order.
+        per_user_msgs: dict = {}
+        for turn in record.get("turns", []):
+            for uid, msg in (turn.get("user_messages") or {}).items():
+                if msg:
+                    per_user_msgs.setdefault(uid, []).append(msg)
+
+        for user in ctx.users:
+            uid = user.get("id", "")
+            msgs = per_user_msgs.get(uid, [])
+            user["instructions"] = msgs
+
+        ctx.artifacts["transcript.cache_path"] = str(path)
+        ctx.artifacts["transcript.num_turns"] = len(record.get("turns", []))
+        ctx.artifacts["transcript.simulator_model"] = record.get("simulator_model", "")
+        logger.info(
+            "[ac-adapter] replay: loaded %d turns from %s for scenario %s",
+            len(record.get("turns", [])), path.name, ctx.scenario_id,
+        )

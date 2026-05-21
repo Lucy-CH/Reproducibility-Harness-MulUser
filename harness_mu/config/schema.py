@@ -23,11 +23,26 @@ class ModuleActivation(BaseModel):
     compliance_checker: bool = False
 
 
+class TranscriptConfig(BaseModel):
+    """Open-loop SimulatedUser transcript replay (Access-Control only).
+
+    When ``mode == 'replay'`` the AC adapter loads cached SimulatedUser
+    messages produced by Muses-Bench and replaces each user's instruction
+    text with the flattened multi-turn attack content, so the Worker sees
+    bit-identical attack input to what the Muses-Bench defender saw.
+    """
+    mode: str = "off"  # "off" | "replay"
+    cache_dir: Optional[str] = None  # None -> <repo_root>/transcripts
+    simulator_model: str = "deepseek-v4-pro"
+    max_turns: int = 10
+
+
 class ScenarioConfig(BaseModel):
     """Configuration for a single benchmark scenario."""
     enabled: bool = True
     data_file: str = ""
     modules: ModuleActivation = Field(default_factory=ModuleActivation)
+    transcript: TranscriptConfig = Field(default_factory=TranscriptConfig)
 
 
 class OutputConfig(BaseModel):
