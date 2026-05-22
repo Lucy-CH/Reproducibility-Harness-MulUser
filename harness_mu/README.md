@@ -45,6 +45,22 @@ Boundary Layer (deterministic Python — last, non-bypassable filter)
   enabling apples-to-apples comparison. Open-loop: inter-turn
   dynamics are lost on the Harness side. See
   `docs/run_experiments.md §9.6` for the generate-then-replay workflow.
+* **Multi-turn Live** (AC-only, optional) — when
+  `scenarios.access_control.transcript.mode == "live"` the Skill Layer
+  spawns one Muses-Bench `SimulatedUser` per dataset user and drives a
+  per-turn loop: each turn, every non-finished user calls the simulator
+  to react to the Worker's previous reply (turn 0 uses dataset
+  `initial_messages`), the Worker runs a per-user stateful step
+  (`run_per_user_turn_step`), and any user whose reply contains
+  `goal_achieved: true` is removed from subsequent turns (early stop,
+  matching Muses-Bench). Mediator and Gatekeeper stay single-pass at
+  turn 0 (their inputs — `authorized_users`, resource description — are
+  invariant across turns). Each user's per-turn replies are concatenated
+  with `\n` and handed to the evaluator (E1 concat), so a single
+  scenario's `eva.json` is comparable to the open-loop `replay` numbers.
+  The simulator's LLM calls are tracked via an instrumented caller and
+  appear under `module_metrics.json -> simulator`. See
+  `docs/run_experiments.md §9.7`.
 
 ## Directory layout
 
@@ -71,7 +87,10 @@ harness_mu/
 ├── config/
 │   ├── schema.py               #   pydantic config models
 │   ├── defaults.yaml           #   default model + scenario activation
-│   ├── ac_replay_bmini.yaml    #   AC strict replay (4 modules = deepseek)
+│   ├── ac_replay_bmini.yaml    #   AC strict replay  (4 modules = deepseek)
+│   ├── ac_replay_qwen.yaml     #   AC replay on qwen baseline
+│   ├── ac_live_bmini.yaml     #   AC multi-turn live (4 modules + simulator = deepseek)
+│   ├── ac_live_debug.yaml     #   AC live debug (single scenario, 3 turns)
 │   └── loader.py               #   YAML + HMU_* env-var override
 ├── metrics/
 │   ├── collector.py            #   thread-safe per-module aggregation
@@ -121,15 +140,22 @@ Per-scenario transcript replay is in
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mode` | `"off"` | `"off"` skips replay (uses dataset `initial_messages`); `"replay"` loads cached multi-turn attack content. |
-| `cache_dir` | `null` | `null` → `<repo_root>/transcripts`. Override to point elsewhere. |
-| `simulator_model` | `deepseek-v4-pro` | Must match the `--user-model` used when generating the cache on the Muses-Bench side; participates in the cache filename. |
-| `max_turns` | `10` | Must match the `--max-turns` used when generating; participates in the cache filename. |
+| `mode` | `"off"` | `"off"` skips both replay and live (uses dataset `initial_messages` for a single Worker turn); `"replay"` loads cached multi-turn attack content (open-loop); `"live"` spawns a Muses-Bench `SimulatedUser` per dataset user and runs a closed-loop per-turn dialogue. |
+| `cache_dir` | `null` | `null` → `<repo_root>/transcripts`. Override to point elsewhere. Only consulted in `"replay"`. |
+| `simulator_model` | `deepseek-v4-pro` | In `"replay"`: must match the `--user-model` used when generating the cache (participates in the cache filename). In `"live"`: model used to instantiate the live `SimulatedUser`. |
+| `simulator_provider` / `simulator_temperature` | `openai` / `1.0` | `"live"`-only; routed through the same `InstrumentedLLMCaller` as the other modules so `module_metrics.json -> simulator` captures token/latency. |
+| `max_turns` | `10` | In `"replay"`: must match the `--max-turns` used when generating (cache filename). In `"live"`: hard upper bound on the per-scenario turn loop; per-user early stop on `goal_achieved: true` may end it sooner. Overridable per-run via `--max-turns`. |
 
 The `ac_replay_bmini.yaml` config is a ready-made override that flips
 all four AC modules to `deepseek-v4-pro` and sets `mode: replay` — used
-for the strict apples-to-apples comparison against Muses-Bench. See
-`docs/run_experiments.md §9.6` for the full generate-then-replay flow.
+for the strict open-loop apples-to-apples comparison against
+Muses-Bench. The `ac_live_bmini.yaml` config is the closed-loop
+counterpart: same 4 modules on `deepseek-v4-pro` plus a 5th
+`simulator` module on `deepseek-v4-pro@temp=1.0`, with
+`mode: live, max_turns: 10` and `output.subdir: live` (so live runs
+land under `results/access_control/live/{stem}/{model}/` and don't
+collide with replay results under `.../replay/{stem}/{model}/`). See
+`docs/run_experiments.md §9.6` (replay) and `§9.7` (live).
 
 ## Running experiments
 
@@ -158,19 +184,33 @@ python -m harness_mu --scenario access_control --debug \
 # via Muses-Bench: see docs/run_experiments.md §9.6.
 python -m harness_mu --scenario access_control \
     --config harness_mu/config/ac_replay_bmini.yaml
+
+# AC multi-turn live (closed-loop SimulatedUser per user, per-user early stop)
+# Override max_turns ad-hoc for fast debug runs:
+python -m harness_mu --scenario access_control \
+    --config harness_mu/config/ac_live_bmini.yaml --max-turns 3
 ```
 
 Useful flags: `--debug` (first 3 scenarios, single worker), `--verbose`
-(DEBUG logging incl. HTTP), `--config path.yaml`, `--output path.jsonl`.
+(DEBUG logging incl. HTTP), `--config path.yaml`, `--output path.jsonl`,
+`--max-turns N` (overrides `scenarios.<name>.transcript.max_turns` for
+`replay` and `live` modes; ignored in `off` mode).
 
 ## Output
 
-Every run writes to `results/<scenario>/<dataset_stem>/<model>[_debug]/`:
+Every run writes to
+`results/<scenario>/[<subdir>/]<dataset_stem>/<model>[_debug]/`
+(`subdir` from `output.subdir`, used by the bundled configs to
+separate `replay/` vs `live/` AC runs):
 
 * `detail.jsonl` — one line per scenario with metrics, all module results
-  (latency, tokens, data dict), and parsed worker outputs.
+  (latency, tokens, data dict), and parsed worker outputs. In AC `live`
+  mode `raw_outputs` additionally carries `live_per_turn_replies`
+  (per-turn per-user Worker replies) and `live_histories` (full
+  per-user message history including system + simulator prompts).
 * `eva.json` — running aggregate (avg accuracy, privacy, utility, …).
-* `module_metrics.json` — per-module total calls / tokens / latency.
+* `module_metrics.json` — per-module total calls / tokens / latency. In
+  AC `live` mode the `simulator` slot is populated.
 
 The orchestrator resumes from `detail.jsonl`: re-running skips already-
 processed scenario IDs. Delete the directory for a clean run.

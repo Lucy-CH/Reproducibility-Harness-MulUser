@@ -54,9 +54,13 @@ def main():
         help="Run in debug mode (first 3 scenarios, single worker).",
     )
     parser.add_argument(
-        "--use-training-format",
-        action="store_true",
-        help="Use @UserName: training format instead of XML eval format.",
+        "--max-turns",
+        type=int,
+        default=None,
+        help=(
+            "Override the per-scenario transcript max_turns "
+            "(applies to access_control transcript.mode=live|replay)."
+        ),
     )
     parser.add_argument(
         "--verbose",
@@ -78,6 +82,10 @@ def main():
     config = load_config(args.config)
     if args.debug:
         config.execution.debug = True
+    if args.max_turns is not None:
+        scenario_cfg = config.scenarios.get(args.scenario)
+        if scenario_cfg is not None and scenario_cfg.transcript is not None:
+            scenario_cfg.transcript.max_turns = int(args.max_turns)
 
     # Initialize infrastructure
     metrics_collector = MetricsCollector()
@@ -89,10 +97,6 @@ def main():
         llm_factory=llm_factory,
         metrics_collector=metrics_collector,
     )
-
-    # Handle training format flag
-    if args.use_training_format:
-        orchestrator._get_adapter(args.scenario)._use_training_format = True
 
     # Run batch
     try:

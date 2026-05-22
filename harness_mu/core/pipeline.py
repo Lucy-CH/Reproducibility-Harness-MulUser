@@ -89,6 +89,8 @@ class PipelineOrchestrator:
             max_turns=1,
             debug=debug,
             output_file=output_file,
+            results_dir=self._config.output.results_dir,
+            subdir=self._config.output.subdir,
         )
 
         # Resume capability

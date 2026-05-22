@@ -17,10 +17,11 @@ def setup_output_structure(
     debug: bool,
     output_file: Optional[str] = None,
     results_dir: str = "results",
+    subdir: Optional[str] = None,
 ) -> Tuple[Path, Path]:
     """Create standardized output directory structure.
 
-    Format: {results_dir}/{task_name}/{data_stem}/{safe_model}/
+    Format: ``{results_dir}/{task_name}[/{subdir}]/{data_stem}/{safe_model}/``
     Contains: detail.jsonl, eva.json
 
     Args:
@@ -31,6 +32,9 @@ def setup_output_structure(
         debug: If True, append "_debug" to the model directory name.
         output_file: If provided, use this exact path for detail.jsonl.
         results_dir: Base directory for results (default "results").
+        subdir: Optional segment inserted between ``task_name`` and
+            ``data_stem`` (e.g. "replay" or "live"). ``None`` (default)
+            preserves the legacy layout.
 
     Returns:
         Tuple of (log_file: Path, eva_file: Path).
@@ -48,7 +52,10 @@ def setup_output_structure(
     if debug:
         safe_model += "_debug"
 
-    output_dir = Path(results_dir) / task_name / data_stem / safe_model
+    base = Path(results_dir) / task_name
+    if subdir:
+        base = base / subdir
+    output_dir = base / data_stem / safe_model
     os.makedirs(output_dir, exist_ok=True)
 
     log_file = output_dir / "detail.jsonl"

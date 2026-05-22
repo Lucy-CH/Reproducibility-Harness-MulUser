@@ -37,3 +37,7 @@ scenarios:
       mode: replay
       simulator_model: deepseek-v4-pro
       max_turns: 10
+
+output:
+  results_dir: results
+  subdir: replay

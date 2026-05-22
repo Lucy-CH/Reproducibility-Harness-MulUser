@@ -24,16 +24,25 @@ class ModuleActivation(BaseModel):
 
 
 class TranscriptConfig(BaseModel):
-    """Open-loop SimulatedUser transcript replay (Access-Control only).
+    """SimulatedUser transcript handling (Access-Control only).
 
-    When ``mode == 'replay'`` the AC adapter loads cached SimulatedUser
-    messages produced by Muses-Bench and replaces each user's instruction
-    text with the flattened multi-turn attack content, so the Worker sees
-    bit-identical attack input to what the Muses-Bench defender saw.
+    * ``mode='off'``  — single-turn flow with the dataset's static
+      ``initial_messages``.
+    * ``mode='replay'`` — open-loop replay: load cached SimulatedUser
+      messages produced by Muses-Bench and flatten all turns into each
+      user's ``instructions`` so the Worker sees bit-identical attack
+      content in a single call.
+    * ``mode='live'`` — multi-turn live (B+D+E1): each global turn the
+      adapter drives ``SimulatedUser`` (live, adaptive) -> Gatekeeper
+      -> Mediator (with cross-user fact-checking) -> Worker per-user
+      isolated step -> ComplianceChecker (log-only). Final eval uses
+      concatenated per-user replies.
     """
-    mode: str = "off"  # "off" | "replay"
+    mode: str = "off"  # "off" | "replay" | "live"
     cache_dir: Optional[str] = None  # None -> <repo_root>/transcripts
     simulator_model: str = "deepseek-v4-pro"
+    simulator_provider: str = "openai"
+    simulator_temperature: float = 1.0
     max_turns: int = 10
 
 
@@ -46,8 +55,15 @@ class ScenarioConfig(BaseModel):
 
 
 class OutputConfig(BaseModel):
-    """Output and logging settings."""
+    """Output and logging settings.
+
+    ``subdir`` (optional) is inserted between the scenario name and the
+    dataset stem in the output path, e.g. ``results/access_control/live/...``.
+    Default ``None`` preserves the legacy layout (no insertion), so the IF
+    scenario and pre-existing AC runs are unaffected.
+    """
     results_dir: str = "results"
+    subdir: Optional[str] = None
     save_raw: bool = True
     save_metrics: bool = True
 

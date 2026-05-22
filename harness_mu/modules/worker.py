@@ -1,23 +1,30 @@
 """Worker: Skill-Layer task execution.
 
-Two execution modes:
+Three execution modes:
 
 * ``run_per_user`` (default for the new architecture) — spawns one isolated
   LLM call per user, in parallel. Each call sees only that user's instruction
   plus its own Mediator guidance entry. This is the primary defense against
   cross-user prompt injection and shared-context leakage.
 
+* ``run_per_user_turn_step`` (AC live mode) — one global turn of a
+  multi-turn live conversation: appends each user's new message to a
+  caller-owned per-user history, issues one isolated LLM call per active
+  user in parallel, and appends the reply back to that user's history.
+  Per-user isolation is preserved because the caller maintains a separate
+  message list for every user.
+
 * ``run`` (legacy single-call mode, kept for baseline comparison) — issues
   one LLM call carrying every user's instruction in the same context, and
   returns a JSON dict mapping user_id → response.
 
-Both modes write the parsed output to ``ctx.artifacts['worker.parsed_responses']``.
+All three modes write the parsed output to ``ctx.artifacts['worker.parsed_responses']``.
 """
 
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from harness_mu.core.types import PipelineContext, ModuleResult
 from harness_mu.modules.base import BaseModule
@@ -134,6 +141,104 @@ class Worker(BaseModule):
                 "completion_tokens": total_completion_tokens,
             } if (total_prompt_tokens or total_completion_tokens) else None,
         )
+
+    # ------------------------------------------------------------------
+    # Per-user multi-turn live-step mode (AC live)
+    # ------------------------------------------------------------------
+
+    def run_per_user_turn_step(
+        self,
+        ctx: PipelineContext,
+        user_turn_messages: Dict[str, str],
+        histories: Dict[str, List[Dict[str, str]]],
+        turn_idx: int,
+    ) -> ModuleResult:
+        """Run one global turn of the multi-turn live loop.
+
+        For every uid with a non-empty ``user_turn_messages[uid]``:
+
+        1. Append ``{"role": "user", "content": <new_msg>}`` to ``histories[uid]``.
+        2. Issue one LLM call with the updated history (parallel across users).
+        3. Append ``{"role": "assistant", "content": <reply>}`` to ``histories[uid]``.
+
+        Per-user isolation is enforced by the caller (the adapter), which owns
+        a separate history list per uid. This method never reads or merges any
+        other user's history. The caller is responsible for accumulating
+        replies into ``ctx.artifacts['worker.parsed_responses']``.
+
+        Args:
+            ctx: pipeline context (used only for ``module_results`` recording).
+            user_turn_messages: uid -> new user message for this turn.
+                Users absent from this dict (or with empty content) are skipped.
+            histories: uid -> running message list (already includes system).
+                Mutated in place: this turn's user/assistant pair is appended.
+            turn_idx: 0-based global turn index (recorded in ModuleResult.data).
+
+        Returns:
+            ModuleResult with per-user reply text and aggregated token/latency
+            stats. The replies are also accessible via ``data['replies']``.
+        """
+        active: List[str] = [
+            uid for uid, msg in user_turn_messages.items()
+            if msg and uid in histories
+        ]
+
+        replies: Dict[str, str] = {}
+        per_user_meta: Dict[str, Dict[str, Any]] = {}
+        total_latency = 0.0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+
+        def _run_one(uid: str) -> Tuple[str, str, Any]:
+            history = histories[uid]
+            history.append({"role": "user", "content": user_turn_messages[uid]})
+            messages = list(history)
+            text, metrics = self.llm_caller.call(messages=messages)
+            history.append({"role": "assistant", "content": text or ""})
+            return uid, text or "", metrics
+
+        if not active:
+            return self._record(
+                ctx,
+                success=True,
+                data={"mode": "per_user_turn_step", "turn_idx": turn_idx, "num_users": 0},
+            )
+
+        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(active))) as ex:
+            futures = [ex.submit(_run_one, uid) for uid in active]
+            for f in as_completed(futures):
+                try:
+                    uid, text, metrics = f.result()
+                except Exception as e:  # fail-soft per user
+                    logger.warning("[worker] live turn-step failed: %s", e)
+                    continue
+                replies[uid] = text
+                total_latency += metrics.latency_ms
+                total_prompt_tokens += metrics.prompt_tokens
+                total_completion_tokens += metrics.completion_tokens
+                per_user_meta[uid] = {
+                    "latency_ms": metrics.latency_ms,
+                    "prompt_tokens": metrics.prompt_tokens,
+                    "completion_tokens": metrics.completion_tokens,
+                }
+
+        return self._record(
+            ctx,
+            success=len(replies) > 0,
+            data={
+                "mode": "per_user_turn_step",
+                "turn_idx": turn_idx,
+                "num_users": len(active),
+                "replies": replies,
+                "per_user_meta": per_user_meta,
+            },
+            latency_ms=total_latency,
+            token_usage={
+                "prompt_tokens": total_prompt_tokens,
+                "completion_tokens": total_completion_tokens,
+            } if (total_prompt_tokens or total_completion_tokens) else None,
+        )
+
 
     # ------------------------------------------------------------------
     # Legacy single-call mode (kept for baseline)
@@ -278,16 +383,17 @@ class Worker(BaseModule):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_per_user_messages(
+    def build_per_user_system_prompt(
         user: dict,
         guidance: Dict[str, Any],
-        revision_feedback: List[Dict[str, str]],
+        revision_feedback: Optional[List[Dict[str, str]]] = None,
         scenario_system_prompt: str = "",
-    ) -> tuple:
-        """Build (system_prompt, user_message) for a single isolated user call.
+    ) -> str:
+        """Build the per-user system prompt (no user message).
 
-        The system prompt only mentions THIS user. The user message contains
-        only THIS user's instruction text.
+        The prompt mentions ONLY this user, embeds the Mediator guidance
+        entry that applies to this user, and optionally appends revision
+        feedback. Shared by the single-turn and multi-turn live modes.
         """
         uid = user.get("id", "User")
         role = user.get("role", "")
@@ -324,10 +430,29 @@ class Worker(BaseModule):
                     sys_parts.append(f"    Fix: {sug}")
             sys_parts.append("--- END REVISION FEEDBACK ---")
 
+        return "\n".join(sys_parts)
+
+    @staticmethod
+    def _build_per_user_messages(
+        user: dict,
+        guidance: Dict[str, Any],
+        revision_feedback: List[Dict[str, str]],
+        scenario_system_prompt: str = "",
+    ) -> tuple:
+        """Build (system_prompt, user_message) for a single isolated user call.
+
+        The user message is the flattened ``instructions`` list (joined with
+        blank lines). Used by single-turn ``run_per_user``.
+        """
+        sys_prompt = Worker.build_per_user_system_prompt(
+            user=user,
+            guidance=guidance,
+            revision_feedback=revision_feedback,
+            scenario_system_prompt=scenario_system_prompt,
+        )
         instructions = user.get("instructions", []) or []
         user_msg = "\n\n".join(instructions) if instructions else ""
-
-        return "\n".join(sys_parts), user_msg
+        return sys_prompt, user_msg
 
     def _record(
         self,
