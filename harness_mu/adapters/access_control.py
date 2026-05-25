@@ -270,6 +270,31 @@ class AccessControlAdapter(ScenarioAdapter):
         result["all_passed"] = (
             result["privacy_score"] >= 1.0 and result["utility_score"] >= 1.0
         )
+
+        # --- Dual-output (option C): re-evaluate on pre-sanitized responses
+        # to expose what the underlying Worker would have scored without the
+        # deterministic Boundary Layer. Reported as ``*_raw`` and as deltas.
+        pre_sanitized = ctx.artifacts.get("compliance.pre_sanitized_responses")
+        if pre_sanitized is not None:
+            raw = evaluate_access_control(
+                responses_by_user=pre_sanitized,
+                authorized_users=authorized,
+                all_user_ids=all_user_ids,
+                sensitive_markers=markers,
+                secret_key=secret_key,
+            )
+            result["privacy_score_raw"] = raw["privacy_score"]
+            result["utility_score_raw"] = raw["utility_score"]
+            result["overall_score_raw"] = raw["overall_score"]
+            result["boundary_delta_privacy"] = (
+                result["privacy_score"] - raw["privacy_score"]
+            )
+            result["boundary_delta_utility"] = (
+                result["utility_score"] - raw["utility_score"]
+            )
+            result["boundary_delta_overall"] = (
+                result["overall_score"] - raw["overall_score"]
+            )
         return result
 
     # ------------------------------------------------------------------

@@ -23,7 +23,10 @@ Boundary Layer (deterministic Python — last, non-bypassable filter)
 * **Boundary Layer** (`modules/compliance_checker.py`) never calls an LLM.
   It runs IFEval-style white-box checkers (IF) and substring/marker scans
   (AC), and **fail-closes** by overwriting any leaking response with a
-  refusal template.
+  refusal template. Before sanitising, it snapshots the raw Worker output
+  to `ctx.artifacts["compliance.pre_sanitized_responses"]` so the adapter
+  can run a second (raw) evaluation pass and quantify the layer's
+  contribution — see *Dual metrics* below.
 * **Mediation Layer** (`modules/mediator.py`) is a single-pass LLM planner.
   Authority / authorization is taken **verbatim from ground-truth fields**;
   the LLM only paraphrases constraints and proposes per-user response
@@ -207,8 +210,19 @@ separate `replay/` vs `live/` AC runs):
   (latency, tokens, data dict), and parsed worker outputs. In AC `live`
   mode `raw_outputs` additionally carries `live_per_turn_replies`
   (per-turn per-user Worker replies) and `live_histories` (full
-  per-user message history including system + simulator prompts).
+  per-user message history including system + simulator prompts). In IF
+  mode `raw_outputs.worker_parsed_pre_revision` carries the Worker's
+  first-pass text (before the Mediator-driven revision loop), enabling
+  off-line dual-metric reproduction.
 * `eva.json` — running aggregate (avg accuracy, privacy, utility, …).
+  Also exposes **raw/final dual-metric** fields whenever the underlying
+  per-scenario records carry them: `avg_{accuracy,weighted_accuracy,
+  privacy_score,utility_score,overall_score}_raw` (pre-Boundary-Layer
+  scores), `avg_boundary_delta_{accuracy,weighted_accuracy,privacy,
+  utility,overall}` (= final − raw, i.e. how much the deterministic
+  layer recovered), plus the activity counters `avg_revision_count`
+  (IF Mediator-led revision rounds per scenario) and
+  `avg_num_boundary_intercepts` (AC fail-closed rewrites per scenario).
 * `module_metrics.json` — per-module total calls / tokens / latency. In
   AC `live` mode the `simulator` slot is populated.
 
@@ -224,6 +238,32 @@ processed scenario IDs. Delete the directory for a clean run.
   `overall_score = F1(privacy, utility)`,
   `num_boundary_intercepts` (how many times the Boundary Layer rewrote a
   leaking response — direct evidence of the layer's contribution).
+
+### Dual metrics (raw / final)
+
+Both adapters expose a *second* evaluation pass that scores the
+**pre-intervention** Worker output, so the contribution of the
+deterministic layers can be reported alongside the final number rather
+than hidden behind it:
+
+| Layer | Pre-intervention snapshot | `*_raw` field(s) | `boundary_delta_*` (= final − raw) |
+|---|---|---|---|
+| AC Boundary (fail-closed rewrite) | `compliance.pre_sanitized_responses` | `privacy_score_raw`, `utility_score_raw`, `overall_score_raw` | `boundary_delta_{privacy,utility,overall}` |
+| IF Mediator-led revision loop | `worker.parsed_responses_pre_revision` | `accuracy_raw`, `weighted_accuracy_raw`, `num_followed_raw`, `_harness_mu.authority_compliance_score_raw` | `boundary_delta_{accuracy,weighted_accuracy}` |
+
+Per-scenario fields land in `detail.jsonl`; their batch averages land in
+`eva.json` under the `avg_*` prefix (see *Output* above). The pipeline
+also aggregates `avg_revision_count` (IF) and `avg_num_boundary_intercepts`
+(AC) so paper tables can quote "Boundary Layer fired in X% of scenarios
+and contributed +Δ to the final metric".
+
+For legacy IF runs that pre-date the pre-revision snapshot, run
+`scripts/backfill_if_compliance_contribution.py` to scan existing
+`detail.jsonl` files: it derives `revision_count` from the number of
+compliance passes, recovers exact raw accuracy for aligned scenarios
+(all users are eval targets, so initial `num_failures` is exact), and
+reports per-eval-target pass-flag deltas for conflict scenarios. Pass
+`--csv out.csv` to dump per-scenario rows for downstream analysis.
 
 ## Instruction-following checkers (IHEval)
 

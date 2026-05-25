@@ -231,23 +231,41 @@ class PipelineOrchestrator:
             vals = [r.metrics.get(key) for r in results if isinstance(r.metrics.get(key), (int, float))]
             return sum(vals) / len(vals) if vals else None
 
-        for k in ("accuracy", "weighted_accuracy", "privacy_score", "utility_score", "overall_score"):
+        for k in (
+            "accuracy", "weighted_accuracy",
+            "privacy_score", "utility_score", "overall_score",
+            # raw/final dual-output: raw = pre-Boundary-Layer score.
+            "accuracy_raw", "weighted_accuracy_raw",
+            "privacy_score_raw", "utility_score_raw", "overall_score_raw",
+            "boundary_delta_accuracy", "boundary_delta_weighted_accuracy",
+            "boundary_delta_privacy", "boundary_delta_utility", "boundary_delta_overall",
+            # Boundary-Layer activity counters (IF revision rounds / AC fail-closed rewrites).
+            "revision_count", "num_boundary_intercepts",
+        ):
             v = _avg(k)
             if v is not None:
                 summary[f"avg_{k}"] = v
 
         # Harness-MU IF custom metrics
         authority_scores = []
+        authority_scores_raw = []
         per_user_rates = []
         for r in results:
             hmu = r.metrics.get("_harness_mu", {}) or {}
             acs = hmu.get("authority_compliance_score")
             if acs is not None:
                 authority_scores.append(acs)
+            acs_raw = hmu.get("authority_compliance_score_raw")
+            if acs_raw is not None:
+                authority_scores_raw.append(acs_raw)
             for pu in hmu.get("per_user_satisfaction", []) or []:
                 per_user_rates.append(pu.get("score", 0.0))
         if authority_scores:
             summary["avg_authority_compliance"] = sum(authority_scores) / len(authority_scores)
+        if authority_scores_raw:
+            summary["avg_authority_compliance_raw"] = (
+                sum(authority_scores_raw) / len(authority_scores_raw)
+            )
         if per_user_rates:
             summary["avg_per_user_accuracy"] = sum(per_user_rates) / len(per_user_rates)
 

@@ -89,6 +89,16 @@ class InstructionFollowingAdapter(ScenarioAdapter):
         compliance = ComplianceChecker()
         compliance.run_instruction_following(ctx)
 
+        # Snapshot the Worker's first-pass responses before any revision so
+        # the evaluator can run a second (raw) pass and quantify how much
+        # the white-box revision loop contributed (option C: dual metrics).
+        ctx.artifacts["worker.parsed_responses_pre_revision"] = dict(
+            ctx.artifacts.get("worker.parsed_responses", {}) or {}
+        )
+        ctx.artifacts["compliance.initial_failures"] = list(
+            ctx.artifacts.get("compliance.failures", []) or []
+        )
+
         # --- Step 4: Revision loop (white-box driven) ---
         for revision in range(MAX_REVISIONS):
             failures = ctx.artifacts.get("compliance.failures", []) or []
@@ -109,17 +119,24 @@ class InstructionFollowingAdapter(ScenarioAdapter):
         # --- Step 5: Evaluate ---
         instruction_results, metrics = self._evaluate(ctx)
 
+        raw_outputs = {
+            "worker_parsed": json.dumps(
+                ctx.artifacts.get("worker.parsed_responses", {}),
+                ensure_ascii=False,
+            ),
+        }
+        pre_rev = ctx.artifacts.get("worker.parsed_responses_pre_revision")
+        if pre_rev is not None:
+            raw_outputs["worker_parsed_pre_revision"] = json.dumps(
+                pre_rev, ensure_ascii=False,
+            )
+
         record = ScenarioRecord(
             scenario_id=ctx.scenario_id,
             module_results=list(ctx.module_results),
             instruction_results=instruction_results,
             metrics=metrics,
-            raw_outputs={
-                "worker_parsed": json.dumps(
-                    ctx.artifacts.get("worker.parsed_responses", {}),
-                    ensure_ascii=False,
-                ),
-            },
+            raw_outputs=raw_outputs,
         )
         self._metrics_collector.record_scenario_metrics(ctx.scenario_id, metrics)
         return record
@@ -134,6 +151,55 @@ class InstructionFollowingAdapter(ScenarioAdapter):
         mode = meta.get("mode", "aligned")
         user_responses = ctx.artifacts.get("worker.parsed_responses", {})
 
+        instruction_results, metrics = self._run_checkers(
+            ctx, users, mode, user_responses
+        )
+
+        # --- Dual-output (option C): re-run the white-box checkers against
+        # the Worker's first-pass output (before the revision loop) to
+        # quantify the contribution of the deterministic feedback loop.
+        pre_rev = ctx.artifacts.get("worker.parsed_responses_pre_revision")
+        if pre_rev is not None and pre_rev != user_responses:
+            _, raw_metrics = self._run_checkers(ctx, users, mode, pre_rev)
+            metrics["accuracy_raw"] = raw_metrics["accuracy"]
+            metrics["weighted_accuracy_raw"] = raw_metrics["weighted_accuracy"]
+            metrics["num_followed_raw"] = raw_metrics["num_followed"]
+            metrics["boundary_delta_accuracy"] = (
+                metrics["accuracy"] - raw_metrics["accuracy"]
+            )
+            metrics["boundary_delta_weighted_accuracy"] = (
+                metrics["weighted_accuracy"] - raw_metrics["weighted_accuracy"]
+            )
+            raw_acs = raw_metrics.get("_harness_mu", {}).get(
+                "authority_compliance_score"
+            )
+            if raw_acs is not None:
+                metrics["_harness_mu"]["authority_compliance_score_raw"] = raw_acs
+        elif pre_rev is not None:
+            # Revision loop did not fire (or produced identical text) — raw
+            # equals final by construction. Surface the equality explicitly
+            # so downstream aggregation always finds the field.
+            metrics["accuracy_raw"] = metrics["accuracy"]
+            metrics["weighted_accuracy_raw"] = metrics["weighted_accuracy"]
+            metrics["num_followed_raw"] = metrics["num_followed"]
+            metrics["boundary_delta_accuracy"] = 0.0
+            metrics["boundary_delta_weighted_accuracy"] = 0.0
+            acs = metrics.get("_harness_mu", {}).get("authority_compliance_score")
+            if acs is not None:
+                metrics["_harness_mu"]["authority_compliance_score_raw"] = acs
+
+        metrics["revision_count"] = int(
+            ctx.artifacts.get("mediator.revision_count", 0) or 0
+        )
+        return instruction_results, metrics
+
+    def _run_checkers(
+        self,
+        ctx: PipelineContext,
+        users: List[Dict],
+        mode: str,
+        user_responses: Dict[str, str],
+    ):
         max_auth = -1
         if mode == "conflict":
             for u in users:

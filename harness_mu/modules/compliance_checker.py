@@ -95,6 +95,10 @@ class ComplianceChecker(BaseModule):
 
     def run_access_control(self, ctx: PipelineContext) -> ModuleResult:
         responses: Dict[str, str] = dict(ctx.artifacts.get("worker.parsed_responses", {}))
+        # Snapshot the pre-sanitized responses so the adapter can run a
+        # second evaluation pass and quantify the Boundary Layer's
+        # contribution (option C: dual-output metrics).
+        ctx.artifacts["compliance.pre_sanitized_responses"] = dict(responses)
         scenario = ctx.scenario_data
         authorized: Set[str] = set(scenario.get("authorized_users", []) or [])
         expected = scenario.get("expected_result", {}) or {}
