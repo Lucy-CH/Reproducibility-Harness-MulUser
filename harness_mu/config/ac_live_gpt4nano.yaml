@@ -1,0 +1,50 @@
+default_model:
+  provider: openai
+  model: openai/gpt-4.1-nano
+  temperature: 0.0
+  max_retries: 6
+  max_tokens: 4096
+
+module_models:
+  gatekeeper:
+    provider: openai
+    model: openai/gpt-4.1-nano
+    temperature: 0.0
+    max_tokens: 4096
+  mediator:
+    provider: openai
+    model: openai/gpt-4.1-nano
+    temperature: 0.0
+    max_tokens: 4096
+  worker:
+    provider: openai
+    model: openai/gpt-4.1-nano
+    temperature: 0.7
+    max_tokens: 16384
+  compliance_checker:
+    provider: openai
+    model: openai/gpt-4.1-nano
+    temperature: 0.0
+    max_tokens: 4096
+  simulator:
+    provider: openai
+    model: deepseek-v4-pro
+    temperature: 1.0
+    max_tokens: 4096
+
+scenarios:
+  instruction_following:
+    enabled: false
+  access_control:
+    enabled: true
+    data_file: data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
+    transcript:
+      mode: live
+      simulator_model: deepseek-v4-pro
+      simulator_provider: openai
+      simulator_temperature: 1.0
+      max_turns: 5
+
+output:
+  results_dir: results
+  subdir: live
