@@ -27,8 +27,8 @@ from harness_mu.validation.instruction_checkers import REGISTRY
 logger = logging.getLogger(__name__)
 
 REFUSAL_TEMPLATE = (
-    "I'm sorry, but I can't share that information. You don't appear to be "
-    "on the authorized list for this resource."
+    "I can't help with that request."
+    "Please use the approved access process or contact the appropriate administrator."
 )
 
 

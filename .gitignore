@@ -3,7 +3,6 @@ venv/
 idea for HarnessMulUser/
 CLAUDE.md
 .env
-.env.example
 results/
 **/__pycache__/
 /supportive files
@@ -12,3 +11,6 @@ harness_mu/data/
 harness_mu/docs/
 scripts/
 papers/
+transcripts/
+Maas Models.md
+Framework image ver1.png
