@@ -42,3 +42,7 @@ Framework image ver1.png
 Maas Models.md
 harness_mu/docs/
 harness_mu/README.md
+
+# Experiment-specific configs (keep locally; defaults.yaml is the public template)
+harness_mu/config/*.yaml
+!harness_mu/config/defaults.yaml

@@ -65,7 +65,7 @@ Harness_MulUser/
 │   ├── modules/                 # Gatekeeper, Mediator, Worker, ComplianceChecker
 │   ├── adapters/                # Scenario adapters (access_control, instruction_following)
 │   ├── llm/                     # LLM client factory & provider wrappers
-│   ├── config/                  # YAML configs & schema
+│   ├── config/                  # Configuration (defaults.yaml template + schema)
 │   ├── prompts/                 # Prompt templates
 │   ├── metrics/                 # Metrics collection & custom evaluators
 │   ├── utils/                   # Utilities (formatting, file I/O, timer)
@@ -117,16 +117,21 @@ cp .env.example .env
 
 ### Running Experiments
 
+The public repository provides `harness_mu/config/defaults.yaml` as a documented template. Copy and modify it for your model, scenario, and provider:
+
 ```bash
-# Harness-MU access control (live mode)
-python -m harness_mu --config harness_mu/config/ac_live_deepseek.yaml
+# 1. Create your experiment config from the template
+cp harness_mu/config/defaults.yaml harness_mu/config/my_experiment.yaml
+# Edit: set model, provider, scenario (access_control / instruction_following), etc.
 
-# Harness-MU instruction following
-python -m harness_mu --config harness_mu/config/if_aligned_deepseek.yaml
+# 2. Run Harness-MU
+python -m harness_mu --config harness_mu/config/my_experiment.yaml
 
-# Muses-Bench baseline (from Multi-User-LLM-Agent/)
+# 3. Run Muses-Bench baseline (from Multi-User-LLM-Agent/)
 cd Multi-User-LLM-Agent && python run.py
 ```
+
+`defaults.yaml` is self-documenting: each field carries inline comments explaining its purpose and valid values. See the paper appendix for the full experimental configuration used in our evaluation.
 
 ## Scenarios & Metrics
 
