@@ -76,7 +76,6 @@ Harness_MulUser/
 │   │   └── utils/               # LLM utilities with metrics instrumentation
 │   ├── run.py                   # Muses-Bench entry point
 │   └── scripts/                 # Batch submission & evaluation scripts
-├── LICENSE
 └── README.md
 ```
 
@@ -163,10 +162,6 @@ If you use Harness-MU in your research, please cite:
   year={2026}
 }
 ```
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
