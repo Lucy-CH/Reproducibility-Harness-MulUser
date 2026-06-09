@@ -1,16 +1,44 @@
-Multi-User-LLM-Agent/
-venv/
-idea for HarnessMulUser/
-CLAUDE.md
+# ============================================================
+# Sensitive files — NEVER commit
+# ============================================================
 .env
-results/
+.env.*.bak
+**/.env
+!**/.env.example
+
+# ============================================================
+# Python
+# ============================================================
+venv/
 **/__pycache__/
-/supportive files
-1.txt
-harness_mu/data/
-harness_mu/docs/
-scripts/
-papers/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+.Python
+build/
+dist/
+.eggs/
+
+# ============================================================
+# Large data / results (keep locally, not in repo)
+# ============================================================
+results/
 transcripts/
-Maas Models.md
+scripts/
+Multi-User-LLM-Agent/data/
+Multi-User-LLM-Agent/results/
+Multi-User-LLM-Agent/IHEval/
+
+# ============================================================
+# Internal docs / working files (keep locally)
+# ============================================================
+idea for HarnessMulUser/
+papers/
+supportive files/
+CLAUDE.md
+1.txt
 Framework image ver1.png
+Maas Models.md
+harness_mu/docs/
+harness_mu/README.md
