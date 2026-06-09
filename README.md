@@ -1,10 +1,5 @@
 # Harness-MU: Model-Agnostic Hard Constraints for Multi-User LLM Agents via Harness Engineering
 
-[Wangxuan Fan](https://github.com/YuanJrShiuan)<sup>1,2</sup>, [Xiaoyu Nie]<sup>1</sup>, [Zhongxiang Dai](https://sds.cuhk.edu.cn/en/teacher/504)<sup>1</sup>
-
-<sup>1</sup> Chinese University of Hong Kong, Shenzhen &nbsp;|&nbsp; <sup>2</sup> Shenzhen Research Institute of Big Data
-
----
 
 **Harness-MU** is the first model-agnostic, zero-tuning framework for multi-user LLM agents. It decouples language generation from safety orchestration through a four-module runtime harness, guaranteeing unbreakable permission boundaries while maximizing compliant demand satisfaction across heterogeneous users.
 
