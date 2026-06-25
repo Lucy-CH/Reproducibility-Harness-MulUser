@@ -154,12 +154,14 @@ Tests arbitration among conflicting user instructions under an authority hierarc
 If you use Harness-MU in your research, please cite:
 
 ```bibtex
-@article{fan2026harnessmu,
-  title={Harness-{MU}: Model-Agnostic Hard Constraints for Multi-User {LLM} Agents
-         via Harness Engineering},
-  author={Fan, Wangxuan and Nie, Xiaoyu and Dai, Zhongxiang},
-  journal={arXiv preprint},
-  year={2026}
+@misc{fan2026harnessmusafegovernedeffective,
+      title={Harness-MU: A Safe, Governed, and Effective Harness for Multi-User LLM Agents}, 
+      author={Wangxuan Fan and Xiaoyu Nie and Zhongxiang Dai},
+      year={2026},
+      eprint={2606.21856},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR},
+      url={https://arxiv.org/abs/2606.21856}, 
 }
 ```
 
