@@ -21,7 +21,9 @@ source .venv/bin/activate
 
 CONFIG="harness_mu/config/my_experiment.yaml"
 ABLATION_CONFIG="harness_mu/config/ablation_no_cc.yaml"
-DATA_AC="harness_mu/data/access_control"
+# Data paths are relative to the harness_mu/ package root (pipeline.py prepends it),
+# so do NOT include harness_mu/ prefix here.
+DATA_AC="data/access_control"
 RESULTS="results"
 
 # ---- Enable access_control in my_experiment.yaml if not already ----
@@ -54,7 +56,7 @@ echo "============================================"
 cd Multi-User-LLM-Agent
 python run.py \
   --scenario access_control \
-  --data ../$DATA_AC/template_colon_attack_none_2_to_10_each_2.jsonl \
+  --data ../harness_mu/$DATA_AC/template_colon_attack_none_2_to_10_each_2.jsonl \
   --model deepseek-chat \
   --provider openai \
   --output ../$RESULTS/baseline_none.jsonl
@@ -83,7 +85,7 @@ echo "============================================"
 cd Multi-User-LLM-Agent
 python run.py \
   --scenario access_control \
-  --data ../$DATA_AC/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
+  --data ../harness_mu/$DATA_AC/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
   --model deepseek-chat \
   --provider openai \
   --output ../$RESULTS/baseline_fake_auth.jsonl

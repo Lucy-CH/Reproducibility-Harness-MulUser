@@ -194,12 +194,14 @@ Before running, make sure `access_control` is enabled in `my_experiment.yaml` (`
 
 ### Harness-MU (full)
 
+The `--data` flag for `python -m harness_mu` takes a path **relative to the `harness_mu/` package directory** (not the repo root). The pipeline prepends its own package root automatically.
+
 ```bash
 # None-attack dataset
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/my_experiment.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
+  --data data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
 
 # Copy result aside before running the next condition on the same dataset
 cp -r results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat \
@@ -209,7 +211,7 @@ cp -r results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/my_experiment.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
+  --data data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
 
 cp -r results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat \
       results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat-full
@@ -251,10 +253,11 @@ Note: the baseline runner also writes its own `eva.json` to `results/access_cont
 python repro/make_ablation_config.py
 
 # Run on fake_authorized attack (the condition where CC matters most)
+# Note: --data is relative to the harness_mu/ package directory
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/ablation_no_cc.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
+  --data data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
 ```
 
 This overwrites `results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat/eva.json` with ablation results. The full-harness result is preserved in the `-full/` copy made in the previous step.

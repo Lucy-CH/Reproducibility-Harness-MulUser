@@ -24,7 +24,11 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Absolute path for the baseline runner (called from Multi-User-LLM-Agent/).
+# For harness_mu runs the pipeline prepends its own package root, so we pass
+# a relative path ("data/access_control/...") not an absolute one.
 HARNESS_DATA = REPO_ROOT / "harness_mu" / "data" / "access_control"
+HARNESS_DATA_REL = "data/access_control"  # relative to harness_mu package root
 RESULTS_DIR = REPO_ROOT / "results"
 CONFIG_TEMPLATE = REPO_ROOT / "harness_mu" / "config" / "my_experiment.yaml"
 CONFIG_ABLATION = REPO_ROOT / "harness_mu" / "config" / "ablation_no_cc.yaml"
@@ -73,7 +77,8 @@ def make_ablation_config():
 def run_harness(dataset_key: str, config: Path, tag: str, trials: int):
     """Run Harness-MU on a dataset, optionally multiple trials."""
     data_file = DATASETS[dataset_key]
-    data_path = HARNESS_DATA / data_file
+    # Pass a relative path — pipeline.py prepends its own package root (harness_mu/)
+    data_path = f"{HARNESS_DATA_REL}/{data_file}"
 
     for trial in range(1, trials + 1):
         label = f"Harness-MU | {tag} | trial {trial}/{trials}"
@@ -81,7 +86,7 @@ def run_harness(dataset_key: str, config: Path, tag: str, trials: int):
             sys.executable, "-m", "harness_mu",
             "--scenario", "access_control",
             "--config", str(config),
-            "--data", str(data_path),
+            "--data", data_path,
             "--verbose",
         ]
         run_cmd(cmd, label=label)
@@ -90,7 +95,7 @@ def run_harness(dataset_key: str, config: Path, tag: str, trials: int):
 def run_baseline(dataset_key: str, model: str, tag: str, trials: int):
     """Run Muses-Bench baseline (no harness) on a dataset."""
     data_file = DATASETS[dataset_key]
-    data_path = HARNESS_DATA / data_file
+    data_path = HARNESS_DATA / data_file  # absolute path, called from Multi-User-LLM-Agent/
     baseline_dir = REPO_ROOT / "Multi-User-LLM-Agent"
 
     for trial in range(1, trials + 1):
