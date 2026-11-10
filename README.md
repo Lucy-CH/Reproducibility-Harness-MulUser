@@ -1,170 +1,284 @@
-# Harness-MU: Model-Agnostic Hard Constraints for Multi-User LLM Agents via Harness Engineering
+# Harness-MU Reproducibility — Setup Notes
 
+Reproduction of "Harness-MU: A Safe, Governed, and Effective Harness for Multi-User LLM Agents" (arXiv:2606.21856, Fan, Nie, & Dai, 2026) for FTEC5660 Agentic AI for Business and FinTech.
 
-**Harness-MU** is the first model-agnostic, zero-tuning framework for multi-user LLM agents. It decouples language generation from safety orchestration through a four-module runtime harness, guaranteeing unbreakable permission boundaries while maximizing compliant demand satisfaction across heterogeneous users.
+## Environment
 
-## Overview
+| Component | Version |
+|-----------|---------|
+| OS | macOS (Darwin 25.6.0) |
+| Python | 3.14 (via `.venv/`) |
+| litellm | 1.108.4 |
+| openai | 3.49.0 |
+| absl-py | 2.5.1 |
+| python-dotenv | 1.2.4 |
+| httpx | 0.28.1 |
+| colorama | 0.4.4 |
+| numpy | 2.2.6 |
+| PyYAML | 6.0.3 |
 
-Contemporary LLMs are trained under a **Single Principal–Agent** paradigm — they optimize for one user at a time. When multiple users interact with a shared agent, three systematic failures emerge: unauthorized information disclosure, chaotic resolution of conflicting instructions, and failure to prioritize high-authority directives. Prompt-based safeguards offer zero deterministic guarantees.
-
-Harness-MU addresses this through **Harness Engineering**: governance constraints (who is authorized, what is restricted, whose instructions take precedence) are enforced by deterministic execution hooks operating outside the LLM boundary, rather than entrusted to the model.
-
-```
-                   ┌──────────────┐
-   Users ─────────►│  Gatekeeper  │──► frozen permission map
-                   └──────┬───────┘
-                          │
-                   ┌──────▼───────┐
-                   │   Mediator   │──► per-user policy plan πₖ
-                   └──────┬───────┘
-                          │
-          ┌───────────────┼───────────────┐
-          │               │               │
-   ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
-   │  Worker u₁  │ │  Worker u₂  │ │  Worker uₙ  │  (parallel, isolated)
-   └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-          │               │               │
-          └───────────────┼───────────────┘
-                          │
-                   ┌──────▼───────────┐
-                   │ ComplianceChecker│──► fail-closed projection
-                   └──────────────────┘
-```
-
-### Four Decoupled Modules
-
-| Module | Role |
-|--------|------|
-| **Gatekeeper** | Admission control — computes immutable per-user permission records from declared policy before any LLM invocation |
-| **Mediator** | Policy orchestration — maps global multi-principal objective into per-user execution plans with authority weights |
-| **Workers** | Isolated generation — each user gets a parallel, single-principal context; cross-user history contamination is structurally impossible |
-| **ComplianceChecker** | Deterministic projection — post-generation enforcement that fail-closes any response leaking unauthorized content |
-
-Harness-MU instantiates the six-component harness taxonomy formalized by [Meng et al. (2026)](https://arxiv.org/abs/2605.xxxxx): Execution Loop, Tool Registry, Context Manager, State Store, Lifecycle Hooks, and Evaluation Interface — specialized for multi-principal governance.
-
-## Key Results
-
-Evaluated on the [Muses-Bench](https://github.com/Kordi-AI/Multi-User-LLM-Agent) benchmark across four frontier models (Deepseek, Qwen, Gemini, GPT):
-
-- **100% privacy preservation** across all adversarial access-control attack vectors (vs. 0.926–0.995 baseline)
-- **Overall score improvement** of +0.240 to +0.427 across model families
-- **Instruction-following accuracy** improved by up to +48.9 percentage points (GPT, aligned)
-- **Inverse scaling**: the ComplianceChecker correction loop activates most where the base model is weakest
-
-## Repository Structure
-
-```
-Harness_MulUser/
-├── harness_mu/                  # Harness-MU core implementation
-│   ├── core/                    # Pipeline orchestration & type system
-│   ├── modules/                 # Gatekeeper, Mediator, Worker, ComplianceChecker
-│   ├── adapters/                # Scenario adapters (access_control, instruction_following)
-│   ├── llm/                     # LLM client factory & provider wrappers
-│   ├── config/                  # Configuration (defaults.yaml template + schema)
-│   ├── prompts/                 # Prompt templates
-│   ├── metrics/                 # Metrics collection & custom evaluators
-│   ├── utils/                   # Utilities (formatting, file I/O, timer)
-│   ├── validation/              # Instruction checkers
-│   ├── data/                    # Sample datasets for testing
-│   ├── run.py                   # Main entry point
-│   └── __main__.py              # python -m harness_mu entry
-├── Multi-User-LLM-Agent/        # Muses-Bench (extended)
-│   ├── muses_bench/             # Benchmark framework
-│   │   ├── agents/              # SimulatedUser agent
-│   │   ├── evaluators/          # AC, IF, meeting_scheduling evaluators
-│   │   ├── envs/                # Conversation environments
-│   │   └── utils/               # LLM utilities with metrics instrumentation
-│   ├── run.py                   # Muses-Bench entry point
-│   └── scripts/                 # Batch submission & evaluation scripts
-└── README.md
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- An OpenAI-compatible API endpoint (OpenRouter, DeepSeek, MAAS, OpenAI, etc.)
-
-### Installation
+## Clone
 
 ```bash
-git clone https://github.com/YuanJrShiuan/Harness_MulUser.git
-cd Harness_MulUser
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r harness_mu/requirements.txt 2>/dev/null || pip install litellm openai pyyaml httpx
+git clone https://github.com/YuanJrShiuan/Harness-MulUser.git
+cd Harness-MulUser
 ```
 
-### Configuration
+The repo has two components:
+- `harness_mu/` — the Harness-MU framework (the paper's contribution)
+- `Multi-User-LLM-Agent/` — Muses-Bench benchmark (Yang et al., arXiv:2604.08567), bundled as a subdirectory
+
+## Virtual environment
+
+A `.venv/` is included in the repo. Activate it:
+
+```bash
+source .venv/bin/activate
+```
+
+Verify dependencies:
+
+```bash
+python -c "import litellm, openai, absl, dotenv, httpx, colorama; print('OK')"
+```
+
+If any module is missing, install it:
+
+```bash
+pip install litellm>=1.41.0 openai absl-py python-dotenv httpx colorama pyyaml numpy
+```
+
+## Install Muses-Bench
+
+The Harness-MU access_control adapter imports `muses_bench` for transcript replay/live modes. Install it as an editable package:
+
+```bash
+cd Multi-User-LLM-Agent
+pip install -e .
+cd ..
+```
+
+This makes `muses_bench` importable and installs its dependencies (openai, numpy, termcolor, litellm>=1.41.0).
+
+## Clone IHEval
+
+The ComplianceChecker module imports IHEval's instruction checker registry at import time. Without IHEval, any Harness-MU run fails immediately with an ImportError. Clone it into the expected location:
+
+```bash
+cd Multi-User-LLM-Agent
+git clone https://github.com/ytyz1307zzh/IHEval.git
+cd ..
+```
+
+Verify the path exists:
+
+```bash
+ls Multi-User-LLM-Agent/IHEval/src/rule_following/evaluate/
+# Should show: __init__.py  instructions.py  instructions_registry.py  ...
+```
+
+IHEval depends on `absl-py`, which is already in the venv.
+
+## API credentials
+
+Harness-MU uses litellm, which reads `OPENAI_BASE_URL` and `OPENAI_API_KEY` from the environment. For DeepSeek (OpenAI-compatible):
 
 ```bash
 cp .env.example .env
-# Edit .env with your API credentials:
-#   OPENAI_BASE_URL=https://openrouter.ai/api/v1
-#   OPENAI_API_KEY=your-key-here
 ```
 
-### Running Experiments
+Edit `.env`:
 
-The public repository provides `harness_mu/config/defaults.yaml` as a documented template. Copy and modify it for your model, scenario, and provider:
+```
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_API_KEY=sk-your-key-here
+```
+
+The Muses-Bench baseline runner (`Multi-User-LLM-Agent/run.py`) reads its own `.env`:
 
 ```bash
-# 1. Create your experiment config from the template
+cp Multi-User-LLM-Agent/.env.example Multi-User-LLM-Agent/.env
+# Add the same credentials
+```
+
+`.env` is in `.gitignore` and will not be committed.
+
+## Configuration
+
+Copy the documented template and edit the model name:
+
+```bash
 cp harness_mu/config/defaults.yaml harness_mu/config/my_experiment.yaml
-# Edit: set model, provider, scenario (access_control / instruction_following), etc.
-
-# 2. Run Harness-MU
-python -m harness_mu --config harness_mu/config/my_experiment.yaml
-
-# 3. Run Muses-Bench baseline (from Multi-User-LLM-Agent/)
-cd Multi-User-LLM-Agent && python run.py
 ```
 
-`defaults.yaml` is self-documenting: each field carries inline comments explaining its purpose and valid values. See the paper appendix for the full experimental configuration used in our evaluation.
+In `my_experiment.yaml`, set the model for all three model roles (default, mediator, worker):
 
-## Scenarios & Metrics
+```yaml
+default_model:
+  provider: openai
+  model: deepseek-chat        # changed from qwen/qwen3.6-35b-a3b
+  temperature: 0.0
+  max_tokens: 4096
 
-### Access Control (AC)
-
-Tests whether the system maintains permission boundaries under multi-turn adversarial pressure. Crosses 3 serialization templates (colon, says, XML) × 4 attack vectors (none, fake_authorized, pressure, roleplaying) = 12 datasets.
-
-| Metric | Definition |
-|--------|------------|
-| **Privacy** | 1 − leakage rate (fraction of unauthorized users who receive sensitive tokens) |
-| **Utility** | Fraction of authorized users who successfully receive requested resources |
-| **Overall** | Harmonic mean of Privacy and Utility |
-
-### Instruction Following (IF)
-
-Tests arbitration among conflicting user instructions under an authority hierarchy.
-
-| Metric | Definition |
-|--------|------------|
-| **Accuracy** | Fraction of atomic instruction constraints satisfied across evaluation targets |
-| **W.Acc** | Authority-weighted accuracy |
-| **Per-User Acc** | Macro-averaged accuracy across individual users |
-
-## Citation
-
-If you use Harness-MU in your research, please cite:
-
-```bibtex
-@misc{fan2026harnessmusafegovernedeffective,
-      title={Harness-MU: A Safe, Governed, and Effective Harness for Multi-User LLM Agents}, 
-      author={Wangxuan Fan and Xiaoyu Nie and Zhongxiang Dai},
-      year={2026},
-      eprint={2606.21856},
-      archivePrefix={arXiv},
-      primaryClass={cs.CR},
-      url={https://arxiv.org/abs/2606.21856}, 
-}
+module_models:
+  mediator:
+    provider: openai
+    model: deepseek-chat
+    temperature: 0.0
+    max_tokens: 4096
+  worker:
+    provider: openai
+    model: deepseek-chat
+    temperature: 0.7          # stochastic; run multiple trials
+    max_tokens: 16384
 ```
 
-## Acknowledgments
+`provider: openai` stays as-is — litellm routes by `OPENAI_BASE_URL`, so DeepSeek's endpoint receives the calls. The model swap from Qwen to DeepSeek is documented as Edge Case A in the assignment instructions; results are not directly comparable to the paper's Qwen numbers because the underlying LLM differs.
 
-Harness-MU builds upon and extends [Muses-Bench](https://github.com/Kordi-AI/Multi-User-LLM-Agent) (Yang et al., 2026) for multi-principal evaluation, [IHEval](https://github.com/asafpr/IHEval) for deterministic instruction-following checking, and the agent harness taxonomy formalized by [Meng et al. (2026)](https://arxiv.org/abs/2605.xxxxx).
+## Sanity check
+
+Run the harness on 3 scenarios to verify the pipeline works:
+
+```bash
+python -m harness_mu \
+  --scenario access_control \
+  --config harness_mu/config/my_experiment.yaml \
+  --debug \
+  --verbose
+```
+
+Expected output on the none-attack dataset:
+
+```
+==================================================
+  Scenarios completed: 3
+  Average privacy_score  100.00%
+  Average utility_score  100.00%
+  Average overall_score  100.00%
+==================================================
+```
+
+Results are written to `results/access_control/<dataset>/<model>_debug/`:
+- `log.jsonl` — per-scenario detail
+- `eva.json` — aggregated metrics (read this for your report)
+- `module_metrics.json` — token usage and latency per module
+
+## Running experiments
+
+### Harness-MU (full)
+
+```bash
+python -m harness_mu \
+  --scenario access_control \
+  --config harness_mu/config/my_experiment.yaml \
+  --data harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl \
+  --verbose
+```
+
+To run an attack dataset, change `--data`:
+
+```bash
+python -m harness_mu \
+  --scenario access_control \
+  --config harness_mu/config/my_experiment.yaml \
+  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
+  --verbose
+```
+
+### Muses-Bench baseline (no harness)
+
+```bash
+cd Multi-User-LLM-Agent
+python run.py \
+  --scenario access_control \
+  --data ../harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl \
+  --model deepseek-chat \
+  --provider openai \
+  --output ../results/baseline_ac_none.jsonl
+cd ..
+```
+
+### Ablation (ComplianceChecker disabled)
+
+Generate the ablation config:
+
+```bash
+python repro/make_ablation_config.py
+```
+
+Run with the ablation config:
+
+```bash
+python -m harness_mu \
+  --scenario access_control \
+  --config harness_mu/config/ablation_no_cc.yaml \
+  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
+  --verbose
+```
+
+### Multiple trials
+
+For stochastic runs (worker temperature 0.7), run each condition 3 times and report mean and variance. The `repro/run_experiments.py` script automates all conditions:
+
+```bash
+python repro/run_experiments.py --model deepseek-chat --trials 3
+```
+
+### Aggregating results
+
+```bash
+python repro/aggregate_results.py
+```
+
+Reads all `eva.json` and `baseline_*.jsonl` files under `results/` and prints a comparison table. Saves to `results/comparison_table.json`.
+
+## Model swap documentation
+
+| Parameter | Paper (Qwen) | This reproduction |
+|-----------|-------------|-------------------|
+| Model | qwen/qwen3.6-35b-a3b | deepseek-chat |
+| Provider | openai (MAAS) | openai (DeepSeek API) |
+| Base URL | (MAAS endpoint) | https://api.deepseek.com |
+| Temperature (default/mediator) | 0.0 | 0.0 |
+| Temperature (worker) | 0.7 | 0.7 |
+| Max tokens (default/mediator) | 4096 | 4096 |
+| Max tokens (worker) | 16384 | 16384 |
+
+Results are not directly comparable to the paper because the underlying LLM differs. Comparisons are made fairly: same tasks, same metrics, same evaluation scripts, same datasets.
+
+## Data
+
+Access control datasets are bundled at `harness_mu/data/access_control/`. Twelve datasets cross 3 serialization templates (colon, says, XML) with 4 attack vectors (none, fake_authorized, pressure, roleplaying). Two `*_sample.jsonl` files contain 3-row subsets for quick sanity checks.
+
+Instruction following datasets are at `harness_mu/data/instruction_following/`:
+- `aligned_2_to_10.jsonl` — aligned instructions (no conflict)
+- `conflict_2_to_10.jsonl` — conflicting instructions with authority hierarchy
+
+## Metrics
+
+Harness-MU's `eva.json` reports dual-output metrics:
+
+| Key | Meaning |
+|-----|---------|
+| `avg_privacy_score` | Privacy after ComplianceChecker (final) |
+| `avg_privacy_score_raw` | Privacy before ComplianceChecker (Worker alone) |
+| `avg_boundary_delta_privacy` | ComplianceChecker's contribution to privacy |
+| `avg_utility_score` | Fraction of authorized users served |
+| `avg_overall_score` | Harmonic mean of privacy and utility |
+| `avg_accuracy` | IF: fraction of instruction constraints satisfied |
+| `avg_authority_compliance` | IF: authority-weighted accuracy |
+| `avg_num_boundary_intercepts` | Count of ComplianceChecker rewrites |
+
+## Troubleshooting
+
+**`ImportError: IHEval source not found`** — Clone IHEval into `Multi-User-LLM-Agent/IHEval/` (see above). The path is hardcoded in `harness_mu/validation/instruction_checkers.py`.
+
+**`ModuleNotFoundError: No module named 'colorama'`** — `pip install colorama`. Required by litellm's logging.
+
+**`ModuleNotFoundError: No module named 'absl'`** — `pip install absl-py` (the package is `absl-py`, not `absl`). Required by IHEval.
+
+**`ModuleNotFoundError: No module named 'muses_bench'`** — Run `cd Multi-User-LLM-Agent && pip install -e . && cd ..`.
+
+**Rate limit errors** — Reduce `execution.max_workers` in your config from 16 to 4.
+
+**`.git/index.lock` blocks git** — Remove it: `rm -f .git/index.lock`. This is a stale lock from an interrupted git process.
