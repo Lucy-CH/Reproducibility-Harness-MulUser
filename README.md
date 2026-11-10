@@ -165,72 +165,107 @@ Results are written to `results/access_control/<dataset>/<model>_debug/`:
 
 ## Running experiments
 
+**Run all conditions with one script** (recommended):
+
+```bash
+bash repro/run_all.sh
+```
+
+This runs five conditions in order:
+1. Baseline (no harness) on none-attack dataset
+2. Harness-MU (full) on none-attack dataset
+3. Baseline (no harness) on fake_authorized attack dataset
+4. Harness-MU (full) on fake_authorized attack dataset
+5. Harness-MU (ablation: ComplianceChecker off) on fake_authorized attack dataset
+
+Then build the comparison table:
+
+```bash
+python repro/build_table.py
+```
+
+Prints a table to stdout and saves `results/comparison_table.json` and `results/comparison_table.md`.
+
+---
+
+**Or run conditions manually:**
+
+Before running, make sure `access_control` is enabled in `my_experiment.yaml` (`enabled: true` under `scenarios.access_control`).
+
 ### Harness-MU (full)
 
 ```bash
+# None-attack dataset
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/my_experiment.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl \
-  --verbose
-```
+  --data harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
 
-To run an attack dataset, change `--data`:
+# Copy result aside before running the next condition on the same dataset
+cp -r results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat \
+      results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat-full
 
-```bash
+# Fake_authorized attack dataset
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/my_experiment.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
-  --verbose
+  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
+
+cp -r results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat \
+      results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat-full
 ```
+
+Results land in `results/access_control/<dataset>/deepseek-chat-full/`:
+- `detail.jsonl` — per-scenario detail (one JSON line per scenario)
+- `eva.json` — aggregated metrics (read this for your report)
+- `module_metrics.json` — token usage and latency per module
 
 ### Muses-Bench baseline (no harness)
 
 ```bash
 cd Multi-User-LLM-Agent
+
 python run.py \
   --scenario access_control \
   --data ../harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl \
   --model deepseek-chat \
   --provider openai \
-  --output ../results/baseline_ac_none.jsonl
+  --output ../results/baseline_none.jsonl
+
+python run.py \
+  --scenario access_control \
+  --data ../harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
+  --model deepseek-chat \
+  --provider openai \
+  --output ../results/baseline_fake_auth.jsonl
+
 cd ..
 ```
 
+Note: the baseline runner also writes its own `eva.json` to `results/access_control/<dataset>/deepseek-chat/`. The `--output` flag writes the per-scenario JSONL used by `build_table.py`.
+
 ### Ablation (ComplianceChecker disabled)
 
-Generate the ablation config:
-
 ```bash
+# Generate ablation config (sets compliance_checker: false)
 python repro/make_ablation_config.py
-```
 
-Run with the ablation config:
-
-```bash
+# Run on fake_authorized attack (the condition where CC matters most)
 python -m harness_mu \
   --scenario access_control \
   --config harness_mu/config/ablation_no_cc.yaml \
-  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
-  --verbose
+  --data harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
 ```
 
-### Multiple trials
+This overwrites `results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat/eva.json` with ablation results. The full-harness result is preserved in the `-full/` copy made in the previous step.
 
-For stochastic runs (worker temperature 0.7), run each condition 3 times and report mean and variance. The `repro/run_experiments.py` script automates all conditions:
+### Build comparison table
 
 ```bash
-python repro/run_experiments.py --model deepseek-chat --trials 3
+python repro/build_table.py
 ```
 
-### Aggregating results
-
-```bash
-python repro/aggregate_results.py
-```
-
-Reads all `eva.json` and `baseline_*.jsonl` files under `results/` and prints a comparison table. Saves to `results/comparison_table.json`.
+Reads `results/baseline_none.jsonl`, `results/baseline_fake_auth.jsonl`, all `deepseek-chat-full/eva.json` files (full harness), and the `deepseek-chat/eva.json` files alongside a `-full/` copy (ablation). Prints results to stdout. Saves `results/comparison_table.json` and `results/comparison_table.md`.
 
 ## Model swap documentation
 
