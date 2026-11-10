@@ -159,7 +159,7 @@ Expected output on the none-attack dataset:
 ```
 
 Results are written to `results/access_control/<dataset>/<model>_debug/`:
-- `log.jsonl` — per-scenario detail
+- `detail.jsonl` — per-scenario detail (one JSON line per scenario)
 - `eva.json` — aggregated metrics (read this for your report)
 - `module_metrics.json` — token usage and latency per module
 
