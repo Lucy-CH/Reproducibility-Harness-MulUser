@@ -57,7 +57,7 @@ cd Multi-User-LLM-Agent
 python run.py \
   --scenario access_control \
   --data ../harness_mu/$DATA_AC/template_colon_attack_none_2_to_10_each_2.jsonl \
-  --model deepseek-chat \
+  --model deepseek-v4-pro \
   --provider openai \
   --output ../$RESULTS/baseline_none.jsonl
 cd ..
@@ -73,8 +73,8 @@ python -m harness_mu \
   --config $CONFIG \
   --data $DATA_AC/template_colon_attack_none_2_to_10_each_2.jsonl
 # Copy aside so ablation doesn't overwrite
-cp -r $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat \
-      $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat-full
+cp -r $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-v4-pro \
+      $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-v4-pro-full
 echo "[DONE] Condition 2"
 
 echo ""
@@ -86,7 +86,7 @@ cd Multi-User-LLM-Agent
 python run.py \
   --scenario access_control \
   --data ../harness_mu/$DATA_AC/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
-  --model deepseek-chat \
+  --model deepseek-v4-pro \
   --provider openai \
   --output ../$RESULTS/baseline_fake_auth.jsonl
 cd ..
@@ -101,8 +101,8 @@ python -m harness_mu \
   --scenario access_control \
   --config $CONFIG \
   --data $DATA_AC/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
-cp -r $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat \
-      $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat-full
+cp -r $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro \
+      $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro-full
 echo "[DONE] Condition 4"
 
 echo ""
@@ -124,6 +124,6 @@ echo ""
 echo "Result files:"
 echo "  Baseline none:        $RESULTS/baseline_none.jsonl"
 echo "  Baseline fake_auth:   $RESULTS/baseline_fake_auth.jsonl"
-echo "  Harness none:         $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-chat-full/eva.json"
-echo "  Harness fake_auth:    $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat-full/eva.json"
-echo "  Ablation fake_auth:   $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-chat/eva.json"
+echo "  Harness none:         $RESULTS/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-v4-pro-full/eva.json"
+echo "  Harness fake_auth:    $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro-full/eva.json"
+echo "  Ablation fake_auth:   $RESULTS/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro/eva.json"

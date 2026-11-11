@@ -108,7 +108,7 @@ def main():
         attack = "none" if "none" in dataset_name else (
             "fake_authorized" if "fake_authorized" in dataset_name else dataset_name
         )
-        for model_dir in dataset_dir.glob("deepseek-chat-full"):
+        for model_dir in dataset_dir.glob("deepseek-v4-pro-full"):
             eva = load_eva_json(model_dir / "eva.json")
             if eva:
                 table.append({
@@ -117,18 +117,18 @@ def main():
                     **eva,
                 })
 
-    # --- Ablation (deepseek-chat without -full suffix, after copy) ---
+    # --- Ablation (deepseek-v4-pro without -full suffix, after copy) ---
     for dataset_dir in RESULTS.glob("access_control/*/"):
         dataset_name = dataset_dir.name
         attack = "none" if "none" in dataset_name else (
             "fake_authorized" if "fake_authorized" in dataset_name else dataset_name
         )
-        model_dir = dataset_dir / "deepseek-chat"
+        model_dir = dataset_dir / "deepseek-v4-pro"
         eva_path = model_dir / "eva.json"
         # Only count as ablation if a -full/ copy exists (meaning the original
         # was the full run and this is the ablation overwrite). If no -full/
         # copy exists, this is the only run, not an ablation.
-        full_dir = dataset_dir / "deepseek-chat-full"
+        full_dir = dataset_dir / "deepseek-v4-pro-full"
         if full_dir.exists() and eva_path.exists():
             eva = load_eva_json(eva_path)
             if eva:
