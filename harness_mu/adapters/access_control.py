@@ -208,7 +208,18 @@ class AccessControlAdapter(ScenarioAdapter):
 
         # --- Step 4: ComplianceChecker (Boundary Layer — fail-closed) ---
         compliance = ComplianceChecker()
-        compliance.run_access_control(ctx)
+        if compliance.is_enabled(activation):
+            compliance.run_access_control(ctx)
+        else:
+            # Ablation: skip fail-closed rewrite; still snapshot pre-sanitized for metrics
+            ctx.artifacts["compliance.pre_sanitized_responses"] = dict(
+                ctx.artifacts.get("worker.parsed_responses", {})
+            )
+            ctx.artifacts["compliance.leak_events"] = []
+            ctx.artifacts["compliance.per_user_leak"] = {}
+            ctx.artifacts["compliance.sanitized_responses"] = dict(
+                ctx.artifacts.get("worker.parsed_responses", {})
+            )
 
         # --- Step 5: Evaluate ---
         metrics = self._evaluate(ctx)
