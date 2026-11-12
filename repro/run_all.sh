@@ -34,7 +34,10 @@ LAST_TRIAL="${2:-3}"
 CONDITIONS="${CONDITIONS:-baseline_none full_none baseline_fake full_fake ablation_fake}"
 DRY_RUN="${DRY_RUN:-0}"
 MAX_TURNS=10
-MAX_ATTEMPTS=3
+MAX_ATTEMPTS=2
+# Kill a batch attempt that makes no progress for this many minutes.
+STALL_MINUTES="${STALL_MINUTES:-12}"
+POLL_S="${POLL_S:-30}"
 
 CONFIG="$REPO_ROOT/harness_mu/config/my_experiment.yaml"
 ABLATION_CONFIG="$REPO_ROOT/harness_mu/config/ablation_no_cc.yaml"
@@ -65,6 +68,29 @@ for f in "$DATA_DIR/$DS_NONE" "$DATA_DIR/$DS_FAKE"; do
   if [ ! -f "$f" ]; then echo "[ERROR] Missing dataset: $f"; fail=1; fi
 done
 if [ "$fail" -ne 0 ]; then exit 1; fi
+
+# Two runs appending to the same detail.jsonl would duplicate scenarios.
+stale="$("$PY" - <<'PYEOF'
+import os, subprocess
+me = {os.getpid(), os.getppid()}
+out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout
+for line in out.splitlines():
+    pid, _, args = line.strip().partition(" ")
+    if not pid.isdigit() or int(pid) in me:
+        continue
+    exe = args.split()[0] if args.split() else ""
+    if "python" not in os.path.basename(exe):
+        continue
+    if ("-m harness_mu" in args or "harness_mu" in args.split(" ")[:6]) or \
+       ("run.py" in args and "Multi-User-LLM-Agent" in args):
+        print(pid)
+PYEOF
+)"
+if [ -n "$stale" ]; then
+  echo "[ERROR] A previous run still appears to be active (pid: $(echo $stale | tr '\n' ' '))."
+  echo "        Stop it first:  kill $(echo $stale | tr '\n' ' ')"
+  exit 1
+fi
 
 # ---------------- configs ----------------
 # my_experiment.yaml is created from defaults.yaml if it does not exist yet
@@ -99,6 +125,16 @@ echo "[INFO] Model (from my_experiment.yaml): $MODEL"
 echo "[INFO] Trials $FIRST_TRIAL..$LAST_TRIAL | conditions: $CONDITIONS | max-turns $MAX_TURNS"
 
 # ---------------- helpers ----------------
+# Print every descendant pid of a process (macOS has no setsid; pgrep -P works
+# on both macOS and Linux).
+descendants() {
+  local pid="$1" kid
+  for kid in $(pgrep -P "$pid" 2>/dev/null); do
+    echo "$kid"
+    descendants "$kid"
+  done
+}
+
 # Print the number of usable scenario rows in a detail.jsonl. Rows that carry an
 # "error" (or are not valid JSON) are removed so the runner retries them.
 count_done() {
@@ -122,7 +158,19 @@ if bad and os.environ.get("DRY_RUN") != "1":
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(keep)
     print(f"[prune] removed {bad} failed row(s) from {path}", file=sys.stderr)
-print(len(keep))
+# Dedupe: a second process appending to the same file would repeat a scenario.
+seen, uniq, dups = set(), [], 0
+for line in keep:
+    sid = json.loads(line).get("scenario_id")
+    if sid in seen:
+        dups += 1
+        continue
+    seen.add(sid); uniq.append(line)
+if dups and os.environ.get("DRY_RUN") != "1":
+    with open(path, "w", encoding="utf-8") as f:
+        f.writelines(uniq)
+    print(f"[dedupe] removed {dups} duplicate row(s) from {path}", file=sys.stderr)
+print(len(uniq))
 EOF
 }
 
@@ -161,25 +209,52 @@ run_condition() {
 
   attempt=1
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-    echo "[RUN] attempt $attempt/$MAX_ATTEMPTS  ($(date '+%H:%M:%S'))"
+    done_n="$(count_done "$log")"
+    if [ "$done_n" -ge "$expected" ]; then break; fi
+    echo "[RUN] attempt $attempt/$MAX_ATTEMPTS, $done_n/$expected to go  ($(date '+%H:%M:%S'))"
+
     if [ "$kind" = "baseline" ]; then
-      ( cd "$REPO_ROOT/Multi-User-LLM-Agent" && "$PY" run.py \
-          --scenario access_control \
-          --data "$DATA_DIR/$ds" \
-          --model "$MODEL" \
-          --provider openai \
-          --max-turns "$MAX_TURNS" \
-          --output "$log" ) 2>&1 | tee -a "$out/run.log" \
-        || echo "[WARN] runner exited with an error"
+      cmd=( "$PY" run.py --scenario access_control --data "$DATA_DIR/$ds"
+            --model "$MODEL" --provider openai --max-turns "$MAX_TURNS" --output "$log" )
+      workdir="$REPO_ROOT/Multi-User-LLM-Agent"
     else
-      "$PY" -m harness_mu \
-          --scenario access_control \
-          --config "$cfg" \
-          --data "data/access_control/$ds" \
-          --max-turns "$MAX_TURNS" \
-          --output "$log" 2>&1 | tee -a "$out/run.log" \
-        || echo "[WARN] runner exited with an error"
+      cmd=( "$PY" -m harness_mu --scenario access_control --config "$cfg"
+            --data "data/access_control/$ds" --max-turns "$MAX_TURNS" --output "$log" )
+      workdir="$REPO_ROOT"
     fi
+
+    # Run in the background, then stop it if no new scenario lands in
+    # STALL_MINUTES. A killed attempt keeps the rows already written, so the
+    # next attempt resumes at the scenario that stalled.
+    (
+      cd "$workdir" || exit 1
+      exec "${cmd[@]}"
+    ) >> "$out/run.log" 2>&1 &
+    runner=$!
+
+    last_n="$done_n"; last_progress="$(date +%s)"
+    while kill -0 "$runner" 2>/dev/null; do
+      sleep "$POLL_S"
+      now_n="$(count_done "$log")"
+      if [ "$now_n" -gt "$last_n" ]; then
+        last_n="$now_n"; last_progress="$(date +%s)"
+        echo "  [progress] $now_n/$expected scenarios  ($(date '+%H:%M:%S'))"
+      elif [ $(( $(date +%s) - last_progress )) -gt $(( STALL_MINUTES * 60 )) ]; then
+        echo "[WARN] no progress for ${STALL_MINUTES} min at $now_n/$expected, stopping this attempt"
+        # TERM the run and everything it spawned, then KILL whatever is left.
+        descendants "$runner" | xargs -r kill -TERM 2>/dev/null
+        kill -TERM "$runner" 2>/dev/null
+        for _ in 1 2 3 4 5 6; do
+          kill -0 "$runner" 2>/dev/null || break
+          sleep 5
+        done
+        descendants "$runner" | xargs -r kill -KILL 2>/dev/null
+        kill -KILL "$runner" 2>/dev/null
+        break
+      fi
+    done
+    wait "$runner" 2>/dev/null
+
     done_n="$(count_done "$log")"
     if [ "$done_n" -ge "$expected" ]; then break; fi
     echo "[WARN] $done_n/$expected scenarios after attempt $attempt"
