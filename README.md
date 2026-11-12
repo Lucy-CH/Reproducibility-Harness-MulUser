@@ -10,7 +10,7 @@ disabled). The experiment scripts are in `repro/`.
 
 - macOS or Linux, Python 3.14
 - A DeepSeek API key (OpenAI-compatible endpoint)
-- About 2.5 hours of wall time for one trial of all five conditions; no GPU needed
+- About 2.5 hours of wall time for all five conditions; no GPU needed
 
 ## Install
 
@@ -60,19 +60,17 @@ at temperature 0.0, Worker at 0.7, simulated users at 1.0).
 ## Run
 
 ```bash
-bash repro/run_all.sh 1 1
+bash repro/run_all.sh
 ```
 
-This runs trial 1 (five conditions: baseline and Harness-MU on both datasets, plus the
-ComplianceChecker ablation) with `--max-turns 10`, then prints the comparison table.
+This runs the five conditions (baseline and Harness-MU on both datasets, plus the ComplianceChecker
+ablation) with `--max-turns 10`, then prints the comparison table.
 
 Other invocations:
 
 ```bash
-bash repro/run_all.sh                 # trials 1-3
-bash repro/run_all.sh 2 3             # trials 2 and 3 only
 DRY_RUN=1 bash repro/run_all.sh       # print the plan, make no API calls
-CONDITIONS="full_fake" bash repro/run_all.sh 1 1   # a single condition
+CONDITIONS="full_fake" bash repro/run_all.sh   # a single condition
 python repro/build_table.py           # rebuild the table from existing results
 ```
 
@@ -83,7 +81,7 @@ always safe.
 ## Outputs
 
 ```
-results/runs/trial_<N>/<condition>/
+results/runs/trial_1/<condition>/
     detail.jsonl          one JSON line per scenario, with its metrics
     eva.json              aggregate metrics for the condition
     module_metrics.json   token usage and latency per module

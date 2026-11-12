@@ -30,7 +30,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 FIRST_TRIAL="${1:-1}"
-LAST_TRIAL="${2:-3}"
+LAST_TRIAL="${2:-1}"
 CONDITIONS="${CONDITIONS:-baseline_none full_none baseline_fake full_fake ablation_fake}"
 DRY_RUN="${DRY_RUN:-0}"
 MAX_TURNS=10
