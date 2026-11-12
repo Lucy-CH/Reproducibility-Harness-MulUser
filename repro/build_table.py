@@ -53,8 +53,11 @@ HARNESS_ONLY = ["privacy_score_raw", "boundary_delta_privacy", "num_boundary_int
 
 
 def load_rows(path: Path):
-    """Return (rows, n_error). Harness rows keep metrics under 'metrics'."""
-    rows, errors = [], 0
+    """Return (rows, n_error). Harness rows keep metrics under 'metrics'.
+
+    Duplicate scenario rows (two processes appending to one file) keep the last.
+    """
+    by_id, errors = {}, 0
     with open(path, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
@@ -69,8 +72,8 @@ def load_rows(path: Path):
                 continue
             m = dict(r["metrics"]) if isinstance(r.get("metrics"), dict) else dict(r)
             m["_unscored"] = "per_turn_metrics" in r and not r["per_turn_metrics"]
-            rows.append(m)
-    return rows, errors
+            by_id[r.get("scenario_id")] = m
+    return list(by_id.values()), errors
 
 
 def mean(vals):
