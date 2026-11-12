@@ -1,11 +1,11 @@
 #!/bin/bash
-# Run the Harness-MU reproduction conditions, several independent trials each.
+# Run the Harness-MU reproduction conditions.
 #
 # Usage (from anywhere inside the repo):
-#   bash repro/run_all.sh              # trials 1 to 3
-#   bash repro/run_all.sh 2 3          # only trials 2 and 3
-#   DRY_RUN=1 bash repro/run_all.sh    # print what would run, call no API
-#   CONDITIONS="full_fake ablation_fake" bash repro/run_all.sh 4 5
+#   bash repro/run_all.sh                 # all five conditions, trial 1
+#   bash repro/run_all.sh 1 2             # an explicit trial range
+#   DRY_RUN=1 bash repro/run_all.sh       # print what would run, call no API
+#   CONDITIONS="full_fake" bash repro/run_all.sh
 #
 # Conditions (default: the first five):
 #   baseline_none   Muses-Bench baseline, no-attack dataset
@@ -17,6 +17,7 @@
 #
 # Every run writes to its own folder:
 #   results/runs/trial_<N>/<condition>/{detail.jsonl, eva.json, module_metrics.json, run.log}
+# where <N> defaults to 1.
 #
 # Safe to re-run: a condition that already has every scenario is skipped, and an
 # interrupted one resumes where it stopped. Scenarios that failed with an error
