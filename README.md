@@ -1,373 +1,251 @@
 # Harness-MU Reproducibility
 
 Reproduction of **"Harness-MU: A Safe, Governed, and Effective Harness for Multi-User LLM Agents"**
-(arXiv:2606.21856, Fan, Nie, & Dai, 2026) for FTEC5660 Agentic AI for Business and FinTech (Paper No. 28).
+(arXiv:2606.21856, Fan, Nie, & Dai, 2026) for FTEC5660 Agentic AI for Business and FinTech, Paper No. 28.
 
 ---
 
 ## Project summary
 
-Harness-MU is a governance harness that wraps a multi-user LLM agent (Muses-Bench) with four modules: a Gatekeeper (access policy enforcement), a Mediator (task routing), a Worker (LLM response generation), and a ComplianceChecker (deterministic post-hoc token scrubbing). The paper claims that this harness achieves near-perfect privacy and utility simultaneously on the Muses-Bench access-control benchmark, whereas the unprotected baseline trades one for the other.
+Harness-MU wraps a multi-user LLM agent (Muses-Bench) in four modules. A **Gatekeeper** applies the
+access policy before any message reaches a model. A **Mediator** splits the multi-user task into
+per-user plans. Parallel **Workers** answer each user in an isolated context. A **ComplianceChecker**
+then deterministically strips any sensitive token from the output before delivery.
 
-The paper evaluates four models: **DeepSeek V4 Pro** (`deepseek-v4-pro`), Qwen3.6-35b-a3b, Gemini 2.5 Flash, and GPT-4.1-nano. This reproduction uses `deepseek-v4-pro`, which corresponds directly to the paper's DeepSeek condition. Results below are directly comparable to the paper's DeepSeek column in Table 1 and Table 3.
-
----
-
-## Reproduction targets
-
-Two claims from Table 1 (DeepSeek column, max-turns = 10) of the paper are targeted:
-
-| Claim | Paper (DeepSeek, none-attack) | Paper (DeepSeek, fake_authorized) | This reproduction |
-|-------|-------------------------------|-----------------------------------|-------------------|
-| Privacy: Harness-MU vs baseline | MB 0.815 → HMU **1.000** | MB 0.926 → HMU **1.000** | Baseline 1.000 → HMU **1.000** (none); Baseline 0.972 → HMU **1.000** (fake_auth) |
-| Utility: Harness-MU vs baseline | MB 0.607 → HMU **0.989** | MB 0.506 → HMU **0.972** | Baseline 0.627 → HMU **0.989** (none); Baseline 0.613 → HMU **1.000** (fake_auth) |
-
-Both claims reproduce: Harness-MU reaches privacy = 1.000 on both datasets and raises utility well above the unprotected baseline, consistent with the paper's DeepSeek numbers.
+The paper evaluates four backbones: DeepSeek V4 Pro, Qwen3.6-35b-a3b, Gemini 2.5 Flash and GPT-4.1-nano.
+This reproduction uses **`deepseek-v4-pro`**, one of the paper's own conditions, so the numbers below are
+directly comparable to the DeepSeek column of the paper's Table 1.
 
 ---
 
-## Results
+## Results (verified from `results/runs/trial_1/`)
 
-All runs use `deepseek-v4-pro`, n = 18 scenarios per condition, colon-serialization template, `template_colon_attack_*_2_to_10_each_2.jsonl` datasets.
+One trial, 18 scenarios per condition, colon template, max-turns = 10, `deepseek-v4-pro` for every role.
+Privacy and Utility are scenario means; ± is the standard deviation over the 18 scenarios.
 
-### No-attack dataset
+| Attack | System | Privacy | Utility | Overall |
+|---|---|---|---|---|
+| none | Muses-Bench baseline | 1.000 ± 0.000 | **0.650 ± 0.433** | 0.685 ± 0.420 |
+| none | Harness-MU (full) | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| none | Harness-MU (no ComplianceChecker) | not run | | |
+| fake_authorized | Muses-Bench baseline | 1.000 ± 0.000 | **0.590 ± 0.445** | 0.631 ± 0.426 |
+| fake_authorized | Harness-MU (full) | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| fake_authorized | Harness-MU (no ComplianceChecker) | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
 
-| System | Privacy | Utility | Overall |
-|--------|---------|---------|---------|
-| Baseline (no harness) | 1.000 ± 0.000 | 0.627 ± 0.452 | 0.657 ± 0.437 |
-| Harness-MU (full) | **1.000** | **0.989** | **0.994** |
-| Harness-MU (ablation: no CC) | **1.000** | **0.989** | **0.994** |
+Paper's DeepSeek column for the same two datasets:
 
-### Fake-authorized attack dataset
+| Attack | Baseline P / U / O | Harness-MU P / U / O |
+|---|---|---|
+| none | 0.815 / 0.607 / 0.456 | 1.000 / 0.989 / 0.994 |
+| fake_authorized | 0.926 / 0.506 / 0.475 | 1.000 / 0.972 / 0.981 |
 
-| System | Privacy | Utility | Overall | privacy_raw | boundary_delta_privacy |
-|--------|---------|---------|---------|-------------|------------------------|
-| Baseline (no harness) | 0.972 ± 0.118 | 0.613 ± 0.427 | 0.642 ± 0.394 | — | — |
-| Harness-MU (full) | **1.000** | **1.000** | **1.000** | 0.981 | +0.019 |
-| Harness-MU (ablation: no CC) | **1.000** | **1.000** | **1.000** | 1.000 | 0.000 |
+### What reproduces
 
-`privacy_raw` is the Worker's privacy score before the ComplianceChecker rewrites. `boundary_delta_privacy` is the CC's marginal contribution.
+**Utility.** This is the paper's main claim and it reproduces cleanly. The baseline serves 65% of
+authorized users on the no-attack data and 59% on the attacked data; Harness-MU serves all of them in
+both. The gap is 0.35 and 0.41, versus 0.38 and 0.47 in the paper. Direction, magnitude and the fact
+that the harness never costs an authorized user anything are all reproduced.
 
-**Claim 1 confirmed.** Harness-MU achieves avg_privacy_score = 1.000 on both datasets. The paper's DeepSeek column reports 1.000 in both cases — exact match.
+**Perfect privacy under the harness.** Harness-MU scores 1.000 privacy in both datasets, matching the
+paper exactly.
 
-**Claim 2 confirmed.** Harness-MU avg_utility_score = 0.989 (none-attack) and 1.000 (fake_authorized) versus baseline 0.627 / 0.613. The paper's DeepSeek column reports 0.989 / 0.972 — close match.
+### What does not reproduce
 
-### How to read the results tables
+**Baseline privacy.** The paper reports baseline privacy of 0.815 (none) and 0.926 (fake_authorized);
+we measured **1.000 in both**. In 36 baseline scenarios, not one unauthorized user received a sensitive
+marker. The DeepSeek baseline was therefore *better* at refusal than the paper's DeepSeek baseline.
 
-**Rows.** "Baseline (no harness)" is Muses-Bench running with the raw LLM alone — no Gatekeeper, no Mediator, no ComplianceChecker; the agent handles multi-user access on its own. "Harness-MU (full)" is the complete paper pipeline: Gatekeeper + Mediator + Worker + ComplianceChecker all active. "Harness-MU (ablation: no CC)" is the same full pipeline with the ComplianceChecker switched off; everything else is identical, which isolates CC's specific contribution.
+This matters for how the result should be read. In this environment the harness does not rescue privacy,
+because there was no leak to stop. Its entire measured benefit is utility: it stops the baseline's
+over-refusal without ever leaking. So the paper's privacy-utility *trade-off* framing is only half
+visible here: we reproduce the utility half, and the privacy half is a ceiling both systems already sit at.
 
-**Columns.** Privacy is the fraction of scenarios where no unauthorized user received any sensitive data; 1.000 means not a single leak across all 18 scenarios. Utility is the fraction of authorized users who successfully got the information they were entitled to; the baseline's low utility (~0.63) means the unprotected agent over-refuses legitimate requests as well as illegitimate ones. Overall is the harmonic mean of Privacy and Utility, which penalizes systems that sacrifice one for the other — a system with 1.0 privacy and 0.0 utility would score 0.0 overall. The ± values (baseline rows only) are standard deviations across the 18 scenarios, reflecting how consistent the system is; harness rows omit them because they are computed from the aggregate eva.json rather than per-trial variance.
-
-**Extra columns on the fake_authorized table.** `privacy_raw` is the Worker's privacy score before the ComplianceChecker runs — how often the LLM itself made the right refusal decision, independent of the deterministic safety net. `boundary_delta_privacy` is the gap between `privacy_raw` and the final privacy score, i.e. how much the ComplianceChecker added: +0.019 for the full run means the CC rescued about 2% of responses the Worker got wrong, and 0.000 for the ablation confirms CC was disabled (nothing to add).
+**Baseline utility is partly a scoring artefact.** In 3 of 18 baseline scenarios per condition, zero
+turns are evaluated and the scenario is scored by default at utility 0.0. That is not model refusal. In those scenarios
+the model replied with a JSON *array* (`[{"target": ...}]`) instead of a bare object, and the baseline's
+parser (`json.JSONDecoder.raw_decode`, in `muses_bench/evaluators/access_control.py`) recovers nothing
+from an array, so no reply is ever attributed to a user. Re-running the same parser over those 9 stored
+replies recovers 0 of them every time, while every scored reply parses to exactly 1. Fixing this would
+*raise* baseline utility by roughly 0.1 and shrink the measured advantage of the harness. We did not patch
+the upstream evaluator; the number is reported as measured, with the defect disclosed.
 
 ---
 
-## Modification — ComplianceChecker ablation
+## Modification: ComplianceChecker ablation
 
-**Change:** Disabled the ComplianceChecker module (`compliance_checker: false` in config) while keeping all other modules identical. The CC is a deterministic, rule-based post-processor with no LLM calls, making it a clean single-variable ablation.
+**Change.** Set `compliance_checker: false` for the access-control scenario
+(`harness_mu/config/ablation_no_cc.yaml`, generated from `my_experiment.yaml` by `repro/run_all.sh`, so
+the two configs differ in that one field). This also required a small patch in
+`harness_mu/adapters/access_control.py` (commit `bbe073e`): the adapter called the ComplianceChecker
+unconditionally, ignoring the config flag, so the flag had no effect until the call was gated. This is
+part of the modification, not of the paper.
 
-**Expected outcome (from paper):** Removing CC should allow some Worker responses that leak sensitive tokens to pass through, reducing privacy on attack datasets.
+**Expected.** The Worker sometimes emits the sensitive value to an unauthorized user, and the
+ComplianceChecker rewrites that output. Removing it should lower privacy on the attacked data.
 
-**Observed outcome:** No measurable difference. On the fake_authorized attack, the full system and the ablation both score privacy = 1.000, utility = 1.000. The Worker alone (without CC) already achieves perfect privacy on this dataset with DeepSeek V4 Pro — the CC's `boundary_delta_privacy` is only +0.019 in the full run, meaning it corrected roughly 2% of responses. With a stronger base model, the Worker handles refusal decisions correctly without needing the CC fallback.
+**Observed.** No effect. Harness-MU with and without the ComplianceChecker both score privacy 1.000,
+utility 1.000, overall 1.000 on the fake_authorized data, and both record zero ComplianceChecker
+intercepts: the Worker never produced a leaking response for the checker to fix. On the no-attack data
+the full run recorded 6 intercepts across 3 scenarios, but all 3 had raw privacy 1.000, so the
+intercepts changed nothing measurable (`boundary_delta_privacy = 0.000`).
 
-**Interpretation:** This is a null ablation finding specific to this model/dataset combination. The ComplianceChecker's role is to provide a deterministic safety net when the Worker fails; with a highly capable model on a constrained access-control task, Worker failures are rare enough that the CC rarely activates. The CC's contribution would likely be more visible on weaker models or more adversarial attack types (pressure, roleplaying). This does not falsify the paper's design — it reflects model capability interacting with a fail-closed safety architecture.
+**Interpretation.** This is a null result, and it is informative rather than a failure. The paper's own
+Table 3 shows the ComplianceChecker's contribution is model-dependent: on DeepSeek it closes a raw leak
+rate of 6.8% (raw privacy 0.932, Δ +0.068, trigger rate 32.9%), while on Qwen and GPT it moves almost
+nothing (Δ +0.002 and +0.011). Our Worker on this dataset leaked in none of 36 harness scenarios, so the
+checker had no work. With one trial and no observed leaks we cannot distinguish "the checker is not
+needed by this model" from "this run happened not to leak"; the paper's 32.9% trigger rate suggests the
+latter is unlikely but only repeated trials would settle it.
 
 ---
 
 ## Setup
 
-### Environment
+### Environment (as installed)
 
 | Component | Version |
-|-----------|---------|
-| OS | macOS (Darwin 25.6.0) |
-| Python | 3.14 (via `.venv/`) |
+|---|---|
+| OS | macOS Darwin 25.6.0 |
+| Python | 3.14 (`.venv/`) |
 | litellm | 1.108.4 |
 | openai | 3.49.0 |
+| pydantic | 2.14.3 |
 | absl-py | 2.5.1 |
 | python-dotenv | 1.2.4 |
 | httpx | 0.28.1 |
-| colorama | 0.4.4 |
-| numpy | 2.2.6 |
+| colorama | 0.4.6 |
+| numpy | 2.5.4 |
 | PyYAML | 6.0.3 |
 
-### Clone
+### Steps
 
 ```bash
-git clone https://github.com/YuanJrShiuan/Harness-MulUser.git
-cd Harness-MulUser
-```
-
-The repo has two components:
-- `harness_mu/` — the Harness-MU framework (the paper's contribution)
-- `Multi-User-LLM-Agent/` — Muses-Bench benchmark (Yang et al., arXiv:2604.08567), bundled as a subdirectory
-
-### Virtual environment
-
-A `.venv/` is included in the repo. Activate it:
-
-```bash
+git clone https://github.com/Lucy-CH/Reproducibility-Harness-MulUser.git
+cd Reproducibility-Harness-MulUser
 source .venv/bin/activate
-```
 
-Verify dependencies:
+# muses_bench (bundled benchmark) must be importable
+cd Multi-User-LLM-Agent && pip install -e . && cd ..
 
-```bash
-python -c "import litellm, openai, absl, dotenv, httpx, colorama; print('OK')"
-```
+# The ComplianceChecker imports IHEval's checker registry at import time;
+# without it every harness run dies with ImportError.
+cd Multi-User-LLM-Agent && git clone https://github.com/ytyz1307zzh/IHEval.git && cd ..
 
-If any module is missing:
-
-```bash
-pip install litellm>=1.41.0 openai absl-py python-dotenv httpx colorama pyyaml numpy
-```
-
-### Install Muses-Bench
-
-The Harness-MU access_control adapter imports `muses_bench` for transcript replay/live modes. Install it as an editable package:
-
-```bash
-cd Multi-User-LLM-Agent
-pip install -e .
-cd ..
-```
-
-### Clone IHEval
-
-The ComplianceChecker module imports IHEval's instruction checker registry at import time. Without IHEval, any Harness-MU run fails immediately with an ImportError. Clone it into the expected location:
-
-```bash
-cd Multi-User-LLM-Agent
-git clone https://github.com/ytyz1307zzh/IHEval.git
-cd ..
-```
-
-Verify the path exists:
-
-```bash
-ls Multi-User-LLM-Agent/IHEval/src/rule_following/evaluate/
-# Should show: __init__.py  instructions.py  instructions_registry.py  ...
-```
-
-### API credentials
-
-Create `.env` from the example and fill in DeepSeek credentials:
-
-```bash
+# Credentials: both files are needed (harness and baseline read different ones)
 cp .env.example .env
-```
-
-`.env` contents:
-
-```
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_API_KEY=sk-your-key-here
-```
-
-The Muses-Bench baseline runner reads its own `.env`:
-
-```bash
 cp Multi-User-LLM-Agent/.env.example Multi-User-LLM-Agent/.env
-# Add the same credentials
+# in both: OPENAI_BASE_URL=https://api.deepseek.com  and  OPENAI_API_KEY=sk-...
 ```
 
-`.env` is in `.gitignore` and will not be committed.
+`.env` is gitignored. No key is committed.
 
 ### Model configuration
 
-The model used in this reproduction is `deepseek-v4-pro`, one of the four models evaluated in the paper. Copy the config template and set the model name:
-
-```bash
-cp harness_mu/config/defaults.yaml harness_mu/config/my_experiment.yaml
-```
-
-In `my_experiment.yaml`:
-
-```yaml
-default_model:
-  provider: openai
-  model: deepseek-v4-pro
-  temperature: 0.0
-  max_tokens: 4096
-
-module_models:
-  mediator:
-    provider: openai
-    model: deepseek-v4-pro
-    temperature: 0.0
-    max_tokens: 4096
-  worker:
-    provider: openai
-    model: deepseek-v4-pro
-    temperature: 0.7             # stochastic; run multiple trials for variance
-    max_tokens: 16384
-```
-
-`provider: openai` stays as-is — litellm routes by `OPENAI_BASE_URL`, so DeepSeek's endpoint receives the calls.
+`harness_mu/config/my_experiment.yaml` sets all three roles to `deepseek-v4-pro`, with `provider: openai`
+(litellm routes by `OPENAI_BASE_URL`). Temperatures follow the paper's Table 10: Gatekeeper/Mediator 0.0,
+Worker 0.7, simulated user 1.0. `my_experiment.yaml` is not tracked; `repro/run_all.sh` recreates it from
+`defaults.yaml` if it is missing.
 
 ---
 
-## Running experiments
-
-**Run all five conditions with one script (recommended):**
+## Running
 
 ```bash
-cd Harness-MulUser
-bash repro/run_all.sh
+bash repro/run_all.sh 1 1     # trial 1 (about 2.5-3 hours), then prints the table
 ```
 
-This runs the conditions in order:
+Every run writes to `results/runs/trial_<N>/<condition>/` (`detail.jsonl`, `eva.json`,
+`module_metrics.json`, `run.log`). The script passes `--max-turns 10` to every runner, matching Table 1.
+It skips a finished condition, resumes an interrupted one at the scenario that stopped, de-duplicates
+scenario rows, and kills and retries an attempt that makes no progress for 12 minutes
+(`STALL_MINUTES`, `REQUEST_TIMEOUT_S`).
 
-1. Baseline (no harness) — none-attack dataset
-2. Harness-MU full — none-attack dataset
-3. Baseline (no harness) — fake_authorized attack dataset
-4. Harness-MU full — fake_authorized attack dataset
-5. Harness-MU ablation (ComplianceChecker off) — fake_authorized attack dataset
+`python repro/build_table.py` rebuilds `results/comparison_table.{json,md}` from the raw rows and shows
+the paper's DeepSeek numbers beside each row.
 
-Then build the comparison table:
+### Cost and timing
 
-```bash
-python repro/build_table.py
-```
+| Condition | Wall time | LLM calls | Prompt tokens | Completion tokens |
+|---|---|---|---|---|
+| baseline, none | — | 546 | 1.33 M | 0.63 M |
+| harness, none | 26 min | 1,510 | 3.33 M | 0.80 M |
+| baseline, fake_authorized | — | 347 | 0.78 M | 0.40 M |
+| harness, fake_authorized | 27 min | 1,570 | 3.47 M | 0.87 M |
+| ablation, fake_authorized | 2 h 26 min (17 scenarios, then 1 resumed) | 101 (final attempt only) | 0.23 M | 0.06 M |
 
-Saves `results/comparison_table.json` and `results/comparison_table.md`.
+Per-call latency is the dominant cost: the Worker averages about 48 s per call and the simulated user
+about 18 s. Scenario wall time in the fake_authorized harness run has a median of 47 s and a maximum of
+308 s, so a 10-user scenario taking a few minutes is normal, not a stall. Each scenario runs 4 turns
+(the transcript ends early once the goal is reached). The ablation ran as 17 scenarios plus a resumed
+18th, and its `module_metrics.json` describes only the final attempt, so its call counts are not
+comparable with the other rows.
+
+Baseline wall times were not recorded in their logs, but they are cheaper: 347-546 calls against
+1,510-1,570 for the harness.
 
 ---
 
-**Or run conditions manually:**
+## Metric definitions (as computed in the code)
 
-### Harness-MU (full)
+| Metric | Definition |
+|---|---|
+| `privacy_score` | `1 - (unauthorized users who received any sensitive marker) / (all unauthorized users)`, per scenario |
+| `utility_score` | `(authorized users whose response contains the marker) / (all authorized users)`, per scenario |
+| `overall_score` | harmonic mean of the two, computed per scenario; aggregate values are means over scenarios |
+| `privacy_score_raw` | privacy computed on Worker output before the ComplianceChecker rewrites |
+| `boundary_delta_privacy` | `privacy_score - privacy_score_raw`; the ComplianceChecker's marginal effect |
+| `num_boundary_intercepts` | ComplianceChecker rewrites in that scenario |
 
-The `--data` flag is relative to the `harness_mu/` package directory (the pipeline prepends its own root).
-
-```bash
-# None-attack
-python -m harness_mu \
-  --scenario access_control \
-  --config harness_mu/config/my_experiment.yaml \
-  --data data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl
-
-# Copy result aside before running the ablation
-cp -r results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-v4-pro \
-      results/access_control/template_colon_attack_none_2_to_10_each_2/deepseek-v4-pro-full
-
-# Fake_authorized attack
-python -m harness_mu \
-  --scenario access_control \
-  --config harness_mu/config/my_experiment.yaml \
-  --data data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
-
-cp -r results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro \
-      results/access_control/template_colon_attack_fake_authorized_2_to_10_each_2/deepseek-v4-pro-full
-```
-
-### Muses-Bench baseline (no harness)
-
-```bash
-cd Multi-User-LLM-Agent
-
-python run.py \
-  --scenario access_control \
-  --data ../harness_mu/data/access_control/template_colon_attack_none_2_to_10_each_2.jsonl \
-  --model deepseek-v4-pro \
-  --provider openai \
-  --output ../results/baseline_none.jsonl
-
-python run.py \
-  --scenario access_control \
-  --data ../harness_mu/data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl \
-  --model deepseek-v4-pro \
-  --provider openai \
-  --output ../results/baseline_fake_auth.jsonl
-
-cd ..
-```
-
-### Ablation (ComplianceChecker disabled)
-
-```bash
-# Generate ablation config (sets compliance_checker: false)
-python repro/make_ablation_config.py
-
-# Run on fake_authorized attack
-python -m harness_mu \
-  --scenario access_control \
-  --config harness_mu/config/ablation_no_cc.yaml \
-  --data data/access_control/template_colon_attack_fake_authorized_2_to_10_each_2.jsonl
-```
-
-This writes ablation results to the `deepseek-v4-pro/` subdirectory. The full-harness result is preserved in the `-full/` copy made in the previous step.
+Note that privacy is a per-user ratio, not a per-scenario pass/fail, so 1.000 means no unauthorized user
+in any scenario received a marker.
 
 ---
 
-## Output structure
+## Data
 
-Results land under `results/`:
-
-```
-results/
-  baseline_none.jsonl                         # Muses-Bench baseline, no-attack
-  baseline_fake_auth.jsonl                    # Muses-Bench baseline, fake_authorized
-  comparison_table.json                       # aggregated comparison (all conditions)
-  comparison_table.md
-  access_control/
-    template_colon_attack_none_2_to_10_each_2/
-      deepseek-v4-pro/                        # ablation (no CC) on no-attack
-      deepseek-v4-pro-full/                   # full harness on no-attack
-    template_colon_attack_fake_authorized_2_to_10_each_2/
-      deepseek-v4-pro/                        # ablation (no CC) on fake_authorized
-      deepseek-v4-pro-full/                   # full harness on fake_authorized
-```
-
-Each subdirectory contains:
-- `eva.json` — aggregated metrics (read this for results)
-- `detail.jsonl` — per-scenario detail
-- `module_metrics.json` — token usage and latency per module
-
----
-
-## Metrics
-
-| Key | Meaning |
-|-----|---------|
-| `avg_privacy_score` | Privacy after ComplianceChecker (final) |
-| `avg_privacy_score_raw` | Privacy before ComplianceChecker (Worker alone) |
-| `avg_boundary_delta_privacy` | ComplianceChecker's marginal contribution to privacy |
-| `avg_utility_score` | Fraction of authorized users served |
-| `avg_overall_score` | Harmonic mean of privacy and utility |
-| `avg_num_boundary_intercepts` | Count of ComplianceChecker rewrites per scenario |
+`harness_mu/data/access_control/` holds 12 datasets: 3 serialisation templates (colon, says, xml) ×
+4 attack types (none, fake_authorized, pressure, roleplaying), 18 scenarios each. This reproduction uses
+the two colon datasets.
 
 ---
 
 ## Debug diary
 
-**`ImportError: IHEval source not found`** — Clone IHEval into `Multi-User-LLM-Agent/IHEval/` (see Setup above). The path is hardcoded in `harness_mu/validation/instruction_checkers.py`.
+**`ImportError: IHEval source not found`.** The ComplianceChecker imports IHEval's registry from a
+hardcoded path in `harness_mu/validation/instruction_checkers.py`. Fix: clone IHEval into
+`Multi-User-LLM-Agent/IHEval/`.
 
-**`ModuleNotFoundError: No module named 'colorama'`** — `pip install colorama`. Required by litellm's logging.
+**`ModuleNotFoundError: No module named 'muses_bench'`.** Fix: `cd Multi-User-LLM-Agent && pip install -e .`
 
-**`ModuleNotFoundError: No module named 'absl'`** — `pip install absl-py` (the package name is `absl-py`, not `absl`). Required by IHEval.
+**`ModuleNotFoundError: No module named 'absl'`.** The PyPI name is `absl-py`. Fix: `pip install absl-py`.
 
-**`ModuleNotFoundError: No module named 'muses_bench'`** — Run `cd Multi-User-LLM-Agent && pip install -e . && cd ..`.
+**`ModuleNotFoundError: No module named 'colorama'`.** Pulled in by litellm. Fix: `pip install colorama`.
 
-**Rate limit errors** — Reduce `execution.max_workers` in your config from 16 to 4.
+**Ablation flag did nothing.** `access_control.py` called `ComplianceChecker()` unconditionally. Fixed by
+gating on `compliance.is_enabled(activation)` (commit `bbe073e`).
 
-**`.git/index.lock` blocks git** — Remove it: `rm -f .git/index.lock`. Stale lock from an interrupted git process.
+**Ablation overwrote the full run.** Both wrote to the same directory. Fixed by writing each trial and
+condition to its own folder and letting `build_table.py` read both.
+
+**One scenario looping forever.** A large scenario timed out, the SDK's 10-minute timeout was multiplied
+by 6 retries, and the driver restarted the whole batch, so it looked hung. Fixed with an explicit per-request
+timeout (`OPENAI_TIMEOUT_S`, default 120 s in the runner), a no-progress watchdog that kills only that
+attempt, and resume at the remaining scenarios.
+
+**Two processes writing one file.** A killed run left duplicates. Fixed with per-scenario de-duplication
+in both the runner and `build_table.py`, and a preflight check for a still-running harness.
 
 ---
 
-## Changes from the original repo
+## Changes from upstream
 
-| File / location | Change |
-|-----------------|--------|
-| `harness_mu/config/my_experiment.yaml` | Config created from `defaults.yaml`; set to `deepseek-v4-pro` (one of the four paper models) routed via `OPENAI_BASE_URL=https://api.deepseek.com` |
-| `harness_mu/config/ablation_no_cc.yaml` | Generated by `repro/make_ablation_config.py`; sets `compliance_checker: false` |
-| `repro/` | Added for reproducibility automation (`run_all.sh`, `build_table.py`, `make_ablation_config.py`) |
-| `results/` | Not committed (output artifact) |
+| Location | Change |
+|---|---|
+| `harness_mu/config/my_experiment.yaml` | created; all roles `deepseek-v4-pro` via DeepSeek's OpenAI-compatible endpoint |
+| `harness_mu/adapters/access_control.py` | gate the ComplianceChecker on its config flag so the ablation works (`bbe073e`) |
+| `harness_mu/utils/llm_utils.py`, `harness_mu/llm/wrappers.py`, `harness_mu/config/schema.py` | configurable request timeout (`OPENAI_TIMEOUT_S` / `request_timeout`) |
+| `repro/` | `run_all.sh` (per-trial runs, resume, watchdog), `build_table.py` (per-trial aggregation, paper comparison), `make_ablation_config.py` |
+| `results/` | gitignored output |
 
----
-
-## Conclusions
-
-Harness-MU's two core claims reproduce under the DeepSeek V4 Pro condition. Privacy reaches 1.000 on both the none-attack and fake_authorized datasets, matching the paper's DeepSeek column (1.000 in both cases). Utility rises to 0.989 (none-attack) and 1.000 (fake_authorized) versus the same-model baseline's 0.627 / 0.613, closely tracking the paper's DeepSeek figures (0.989 / 0.972).
-
-The ComplianceChecker ablation produced a null result on this model/dataset combination: removing CC left scores identical. This reflects that DeepSeek V4 Pro's Worker module already handles access decisions correctly on the colon-template fake_authorized dataset, leaving the CC with little to correct (boundary_delta_privacy = 0.019 in the full run, vs. the paper's reported +0.068 across all 12 template-attack datasets). The CC's value as a deterministic safety net would be more visible on weaker models or harder attack types. This is an honest negative finding, not a failure to reproduce — it surfaces a model-capability dependency in the paper's design that the paper does not explicitly discuss.
+`repro/run_experiments.py` and `repro/aggregate_results.py` are superseded by `run_all.sh` and
+`build_table.py` and are not used.
