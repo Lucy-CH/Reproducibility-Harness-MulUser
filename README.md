@@ -88,11 +88,36 @@ results/runs/trial_1/<condition>/
 results/comparison_table.{json,md}   summary built by build_table.py
 ```
 
-A run also writes `detail.jsonl` (full transcripts) and `run.log` next to those; both are gitignored
-and not published, because the model invents credential-shaped strings during role-play.
+A run also writes `detail.jsonl` (full transcripts) and `run.log` next to those. The transcripts are
+committed, because Sections 4.3 and 5.2 of the report argue from them. They contain synthetic secret
+markers that the benchmark defines and that the model reproduces during role-play; five of those
+strings match generic secret-scanner rules, so `repro/redact_transcripts.py` replaces them with
+placeholders before the files are published. `run.log` is not committed.
 
 Conditions are `baseline_none`, `full_none`, `baseline_fake`, `full_fake`, `ablation_fake`
 (and optionally `ablation_none`).
+
+## Known fault in the baseline parser
+
+The evaluator in `Multi-User-LLM-Agent/muses_bench/evaluators/access_control.py` decodes each reply
+with `json.JSONDecoder.raw_decode` and keeps only results that are a bare object with `target` and
+`content`. When the model answers with an array of such objects instead —
+`[{"target": ..., "content": ...}, ...]` — the reply is discarded. The scenario is then written out
+with the evaluator's initialised defaults, privacy 1.0 and utility 0.0.
+
+In the recorded trial this happens in 3 of 18 baseline scenarios in each dataset, and in 22 later-turn
+replies inside four already-scored baseline scenarios. The affected rows are visible in
+`results/runs/trial_1/<condition>/detail.jsonl`: their `per_turn_metrics` list is empty.
+
+This is not fixed. The evaluator and the recorded results are left exactly as they ran, so the numbers
+in `results/` are what the original code produced. The consequence for reading them: baseline utility
+is understated. Re-parsing the same stored replies with an array-tolerant version of the same parser
+would raise baseline utility from 0.650 to about 0.872 on `none` and from 0.590 to about 0.756 on
+`fake_authorized`.
+
+A separate fault: the "Never scored" column in `results/comparison_table.md` always reads 0. Its flag
+is computed from `metrics.jsonl`, which has no `per_turn_metrics` field, so the test is false for every
+row. The true count is 3. Only that column is affected; the scores are not.
 
 ## If a step fails
 
@@ -108,3 +133,4 @@ package name `absl-py`).
 directory. Stop it: `pkill -f "harness_mu"; pkill -f "Multi-User-LLM-Agent/run.py"`.
 
 Rate limits — lower `execution.max_workers` in `harness_mu/config/my_experiment.yaml` from 16.
+

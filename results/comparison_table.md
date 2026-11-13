@@ -21,3 +21,6 @@ Values are the mean over trials of each trial's scenario mean; ± is the standar
 | fake_authorized | Harness-MU (no ComplianceChecker) | trial_1 | 18/18 | 1.000 | 1.000 | 1.000 | 1.000 | 0 |
 
 "Never scored" counts baseline scenarios in which no agent reply was evaluated (zero entries in per_turn_metrics). The baseline records these with its default scores: privacy 1.0, utility 0.0.
+
+> **Known fault in this table.** The "Never scored" column reads 0 for every row, but the true count is 3 in each baseline condition. `build_table.py` computes the flag from `metrics.jsonl`, which does not contain `per_turn_metrics` — only `detail.jsonl` does — so the test is always false. The scores in the other columns are unaffected. For the correct count, read `per_turn_metrics` from `results/runs/trial_1/<condition>/detail.jsonl`; three rows per baseline condition have an empty list. This note is erased whenever `build_table.py` is re-run.
+

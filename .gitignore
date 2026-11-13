@@ -23,11 +23,11 @@ dist/
 # ============================================================
 # Large data / results
 # ============================================================
-# results/ is committed as metrics only: per-scenario scores, aggregates and
-# module metrics. Raw transcripts (detail.jsonl) and console logs (run.log)
-# are not published, because the model invents credential-shaped strings
-# during role-play that trip secret scanners.
-results/runs/*/*/detail.jsonl
+# results/ is committed as per-scenario scores, aggregates, module metrics and
+# raw transcripts. The transcripts are published because Sections 4.3 and 5.2
+# argue from them; the synthetic secret markers that trip generic secret
+# scanners have been replaced by repro/redact_transcripts.py. Console logs are
+# still excluded.
 results/runs/*/*/run.log
 results/runs/trial_2/
 results/runs/trial_3/
