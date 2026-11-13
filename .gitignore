@@ -21,9 +21,16 @@ dist/
 .eggs/
 
 # ============================================================
-# Large data / results (keep locally, not in repo)
+# Large data / results
 # ============================================================
-results/
+# results/ is committed as metrics only: per-scenario scores, aggregates and
+# module metrics. Raw transcripts (detail.jsonl) and console logs (run.log)
+# are not published, because the model invents credential-shaped strings
+# during role-play that trip secret scanners.
+results/runs/*/*/detail.jsonl
+results/runs/*/*/run.log
+results/runs/trial_2/
+results/runs/trial_3/
 transcripts/
 scripts/
 Multi-User-LLM-Agent/data/

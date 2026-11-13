@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the comparison table from the per-trial runs written by run_all.sh.
 
-Reads   results/runs/trial_<N>/<condition>/detail.jsonl
+Reads   results/runs/trial_<N>/<condition>/metrics.jsonl (metrics only, no transcripts)
 Writes  results/comparison_table.json and results/comparison_table.md
 
-Every number is computed from the per-scenario rows in detail.jsonl:
+Every number is computed from the per-scenario rows in metrics.jsonl:
   * each trial's score is the mean over its scenarios;
   * the table reports the mean of the trial scores, and the standard deviation
     across trials when there are at least two trials;
@@ -83,7 +83,7 @@ def mean(vals):
 def summarise(cond: str, attack: str, label: str):
     expected = sum(1 for l in open(DATA_DIR / DATASETS[attack]) if l.strip())
     trial_dirs = sorted(
-        (p for p in RUNS.glob("trial_*") if (p / cond / "detail.jsonl").exists()),
+        (p for p in RUNS.glob("trial_*") if (p / cond / "metrics.jsonl").exists()),
         key=lambda p: int(p.name.split("_")[1]),
     )
     if not trial_dirs:
@@ -95,7 +95,7 @@ def summarise(cond: str, attack: str, label: str):
     }
     pooled = {k: [] for k in METRICS + HARNESS_ONLY}
     for td in trial_dirs:
-        rows, errors = load_rows(td / cond / "detail.jsonl")
+        rows, errors = load_rows(td / cond / "metrics.jsonl")
         if not rows:
             continue
         t = {"trial": td.name, "n": len(rows), "errors": errors,
