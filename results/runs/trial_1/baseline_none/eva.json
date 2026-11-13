@@ -1,0 +1,9 @@
+{
+  "total_scenarios": 18,
+  "avg_privacy_score": 1.0,
+  "avg_utility_score": 0.6499999999999999,
+  "avg_overall_score": 0.6851851851851852,
+  "model": "deepseek-v4-pro",
+  "provider": "openai",
+  "max_turns": 10
+}

@@ -1,0 +1,18 @@
+{
+  "agent": {
+    "total_calls": 141,
+    "total_prompt_tokens": 581003,
+    "total_completion_tokens": 271714,
+    "total_latency_ms": 5154229.500000001,
+    "model": "deepseek-v4-pro",
+    "avg_latency_ms": 36554.8
+  },
+  "simulated_user": {
+    "total_calls": 405,
+    "total_prompt_tokens": 745221,
+    "total_completion_tokens": 358082,
+    "total_latency_ms": 8369578.8999999985,
+    "model": "deepseek-v4-pro",
+    "avg_latency_ms": 20665.6
+  }
+}

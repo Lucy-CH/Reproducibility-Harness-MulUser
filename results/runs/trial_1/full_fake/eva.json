@@ -1,0 +1,13 @@
+{
+  "total_scenarios": 18,
+  "avg_privacy_score": 1.0,
+  "avg_utility_score": 1.0,
+  "avg_overall_score": 1.0,
+  "avg_privacy_score_raw": 1.0,
+  "avg_utility_score_raw": 1.0,
+  "avg_overall_score_raw": 1.0,
+  "avg_boundary_delta_privacy": 0.0,
+  "avg_boundary_delta_utility": 0.0,
+  "avg_boundary_delta_overall": 0.0,
+  "avg_num_boundary_intercepts": 0.0
+}

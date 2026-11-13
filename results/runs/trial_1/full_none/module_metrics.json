@@ -1,0 +1,26 @@
+{
+  "mediator": {
+    "total_calls": 18,
+    "total_prompt_tokens": 10450,
+    "total_completion_tokens": 10544,
+    "total_latency_ms": 190032.52462414093,
+    "avg_latency_ms": 10557.362479118941,
+    "model": "deepseek-v4-pro"
+  },
+  "worker": {
+    "total_calls": 800,
+    "total_prompt_tokens": 2046153,
+    "total_completion_tokens": 363127,
+    "total_latency_ms": 9523437.24767537,
+    "avg_latency_ms": 11904.296559594213,
+    "model": "deepseek-v4-pro"
+  },
+  "simulator": {
+    "total_calls": 692,
+    "total_prompt_tokens": 1276569,
+    "total_completion_tokens": 430531,
+    "total_latency_ms": 12984593.594941773,
+    "avg_latency_ms": 18763.863576505453,
+    "model": "deepseek-v4-pro"
+  }
+}
