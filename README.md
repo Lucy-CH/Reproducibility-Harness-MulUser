@@ -10,7 +10,7 @@ disabled). The experiment scripts are in `repro/`.
 
 - macOS or Linux, Python 3.14
 - A DeepSeek API key (OpenAI-compatible endpoint)
-- About 2.5 hours of wall time for all five conditions; no GPU needed
+- About 4 hours of wall time for all five conditions; no GPU needed
 
 ## Install
 

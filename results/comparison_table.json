@@ -12,7 +12,7 @@
         "unscored": 0,
         "privacy_score": 1.0,
         "utility_score": 0.6499999999999999,
-        "overall_score": 0.6851851851851851
+        "overall_score": 0.6851851851851852
       }
     ],
     "warnings": [],
@@ -23,7 +23,7 @@
     "utility_score": 0.6499999999999999,
     "utility_score_trial_sd": null,
     "utility_score_scenario_sd": 0.4328428596805896,
-    "overall_score": 0.6851851851851851,
+    "overall_score": 0.6851851851851852,
     "overall_score_trial_sd": null,
     "overall_score_scenario_sd": 0.4196516174507715,
     "unscored_per_trial": 0.0,
@@ -92,7 +92,7 @@
         "unscored": 0,
         "privacy_score": 1.0,
         "utility_score": 0.5898148148148148,
-        "overall_score": 0.6306878306878309
+        "overall_score": 0.6306878306878307
       }
     ],
     "warnings": [],
@@ -103,7 +103,7 @@
     "utility_score": 0.5898148148148148,
     "utility_score_trial_sd": null,
     "utility_score_scenario_sd": 0.4451312095939116,
-    "overall_score": 0.6306878306878309,
+    "overall_score": 0.6306878306878307,
     "overall_score_trial_sd": null,
     "overall_score_scenario_sd": 0.42577432140556176,
     "unscored_per_trial": 0.0,
