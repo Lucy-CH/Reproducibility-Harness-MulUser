@@ -20,8 +20,12 @@ Each condition writes to `results/runs/trial_1/<condition>/`. Finished condition
 interrupted one resumes at the scenario that stopped, and an attempt that makes no progress for
 12 minutes (`STALL_MINUTES`) is stopped and retried.
 
-**`build_table.py`** — reads `results/runs/trial_*/` and writes
+**`build_table.py`** — reads `results/runs/trial_*/<condition>/metrics.jsonl` and writes
 `results/comparison_table.{json,md}`, with the paper's DeepSeek numbers beside each row.
+
+`metrics.jsonl` holds `{scenario_id, metrics}` only. The runner also writes `detail.jsonl` (transcripts)
+and `run.log`; both are gitignored and not published, because the model invents credential-shaped strings
+during role-play.
 
 ```bash
 python repro/build_table.py

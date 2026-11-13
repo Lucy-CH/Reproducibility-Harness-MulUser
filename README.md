@@ -82,12 +82,14 @@ always safe.
 
 ```
 results/runs/trial_1/<condition>/
-    detail.jsonl          one JSON line per scenario, with its metrics
+    metrics.jsonl         one JSON line per scenario, with its metrics
     eva.json              aggregate metrics for the condition
     module_metrics.json   token usage and latency per module
-    run.log               console output of the run
 results/comparison_table.{json,md}   summary built by build_table.py
 ```
+
+A run also writes `detail.jsonl` (full transcripts) and `run.log` next to those; both are gitignored
+and not published, because the model invents credential-shaped strings during role-play.
 
 Conditions are `baseline_none`, `full_none`, `baseline_fake`, `full_fake`, `ablation_fake`
 (and optionally `ablation_none`).
